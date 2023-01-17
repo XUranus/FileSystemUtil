@@ -18,13 +18,21 @@
 namespace FileIO {
 
 
-struct OpenDirIterator
+class OpenDirIterator
 {
-	void Next();
-	bool HasNext();
+public:
+	bool Next();
 	void Close();
-	OpenDirIterator operator ++();
 
+	uint64_t INode();
+	bool IsNormal() const;
+	bool IsDirectory() const;
+	std::string Name() const;
+	uint64_t Size() const;
+	uint64_t AccessTime() const;
+	uint64_t CreationTime() const;
+	uint64_t ModifyTime() const;
+	bool DoStat();
 
 #ifdef WIN32
 	bool IsArchive() const;
@@ -47,26 +55,18 @@ struct OpenDirIterator
 	bool IsSocket() const;
 #endif
 
-
-	uint64_t INode() const;
-	bool IsNormal() const;
-	bool IsDirectory() const;
-	std::string Name() const;
-	uint64_t Size() const;
-	uint64_t AccessTime() const;
-	uint64_t CreationTime() const;
-	uint64_t ModifyTime() const;
-	bool DoStat();
-
+private:
 	std::string m_dirPath;
 	bool m_stated = false;
-	struct stat m_stat {};
+	bool m_statFailed = false;
 #ifdef WIN32
+	struct stat m_stat {};
 	HANDLE m_fileHandle = nullptr;
 	WIN32_FIND_DATA m_findFileData;
 #endif
 
 #ifdef LINUX
+	struct stat m_stat {};
 	DIR* m_dir;
 	struct dirent* m_dirent;
 #endif
@@ -75,17 +75,6 @@ struct OpenDirIterator
 	OpenDirIterator(const OpenDirIterator&) = delete;
 	OpenDirIterator operator = (const OpenDirIterator&) = delete;
 };
-
-
-
-
-OpenDirIterator operator + (int n)
-{
-
-}
-
-
-
 }
 
 #endif

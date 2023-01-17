@@ -11,12 +11,19 @@ int main()
 
 namespace FileIO {
 
-uint64_t OpenDirIterator::Size() const
+uint64_t OpenDirResult::Size() const
 {
 #ifdef WIN32
 	DWORD low = m_findFileData.nFileSizeLow;
 	DWORD high = m_findFileData.nFileSizeHigh;
 	return low + (MAXDWORD + 1) * high;
+#endif
+#ifdef LINUX
+	if (DoStat()) {
+		return m_stat.m_size;
+	} else {
+		return 0;
+	}
 #endif
 }
 
@@ -24,47 +31,47 @@ uint64_t OpenDirIterator::Size() const
 
 
 #ifdef WIN32
-bool OpenDirIterator::IsArchive() const
+bool OpenDirResult::IsArchive() const
 {
 	return m_findFileData.dwFileAttributes & FILE_ATTRIBUTE_ARCHIVE;
 }
 
-bool OpenDirIterator::IsCompressed() const
+bool OpenDirResult::IsCompressed() const
 {
 	return m_findFileData.dwFileAttributes & FILE_ATTRIBUTE_COMPRESSED;
 }
 
-bool OpenDirIterator::IsEncrypted() const
+bool OpenDirResult::IsEncrypted() const
 {
 	return m_findFileData.dwFileAttributes & FILE_ATTRIBUTE_ENCRYPTED;
 }
 
-bool OpenDirIterator::IsSparseFile() const
+bool OpenDirResult::IsSparseFile() const
 {
 	return m_findFileData.dwFileAttributes & FILE_ATTRIBUTE_ENCRYPTED;
 }
 
-bool OpenDirIterator::IsHidden() const
+bool OpenDirResult::IsHidden() const
 {
 	return m_findFileData.dwFileAttributes & FILE_ATTRIBUTE_HIDDEN;
 }
 
-bool OpenDirIterator::IsOffline() const
+bool OpenDirResult::IsOffline() const
 {
 	return m_findFileData.dwFileAttributes & FILE_ATTRIBUTE_OFFLINE;
 }
 
-bool OpenDirIterator::IsReadOnly() const
+bool OpenDirResult::IsReadOnly() const
 {
 	return m_findFileData.dwFileAttributes & FILE_ATTRIBUTE_READONLY;
 }
 
-bool OpenDirIterator::IsSystem() const
+bool OpenDirResult::IsSystem() const
 {
 	return m_findFileData.dwFileAttributes & FILE_ATTRIBUTE_SYSTEM;
 }
 
-bool OpenDirIterator::IsTemporary() const
+bool OpenDirResult::IsTemporary() const
 {
 	return m_findFileData.dwFileAttributes & FILE_ATTRIBUTE_TEMPORARY;
 }
@@ -75,32 +82,32 @@ bool OpenDirIterator::IsTemporary() const
 
 
 #ifdef LINUX
-bool OpenDirIterator::IsUnknown() const
+bool OpenDirResult::IsUnknown() const
 {
 	return (m_dirent->d_type & DT_KNOWN != 0);
 }
 
-bool OpenDirIterator::IsPipe() const
+bool OpenDirResult::IsPipe() const
 {
 	return (m_dirent->d_type & DT_FIFO != 0);
 }
 
-bool OpenDirIterator::IsCharDevice() const
+bool OpenDirResult::IsCharDevice() const
 {
 	return (m_dirent->d_type & DT_CHR != 0);
 }
 
-bool OpenDirIterator::IsBlockDevice() const
+bool OpenDirResult::IsBlockDevice() const
 {
 	return (m_dirent->d_type & DT_BLK != 0);
 }
 
-bool OpenDirIterator::IsSymLink() const
+bool OpenDirResult::IsSymLink() const
 {
 	return (m_dirent->d_type & DT_LNK != 0);
 }
 
-bool OpenDirIterator::IsSocket() const
+bool OpenDirResult::IsSocket() const
 {
 	return (m_dirent->d_type & DT_SOCK != 0);
 }
@@ -111,17 +118,21 @@ bool OpenDirIterator::IsSocket() const
 
 
 
-uint64_t OpenDirIterator::INode() const
+uint64_t OpenDirResult::INode()
 {
 #ifdef WIN32
-	// TODO:: do stat
+	if (DoStat()) {
+		return std::static_cast<uint64_t>(m_stat.st_ino);
+	} else {
+		return 0;
+	}
 #endif
 #ifdef LINUX
 	return static_cast<uint64_t>(m_dirent->d_ino);
 #endif
 }
 
-bool OpenDirIterator::IsNormal() const
+bool OpenDirResult::IsNormal() const
 {
 #ifdef WIN32
 	return m_findFileData.dwFileAttributes & FILE_ATTRIBUTE_NORMAL;
@@ -131,7 +142,7 @@ bool OpenDirIterator::IsNormal() const
 #endif
 }
 
-bool OpenDirIterator::IsDirectory() const
+bool OpenDirResult::IsDirectory() const
 {
 #ifdef WIN32
 	return m_findFileData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY;
@@ -141,7 +152,7 @@ bool OpenDirIterator::IsDirectory() const
 #endif
 }
 
-std::string OpenDirIterator::Name() const
+std::string OpenDirResult::Name() const
 {
 #ifdef WIN32
 	return std::string(m_findFileData.cFileName);
@@ -151,7 +162,7 @@ std::string OpenDirIterator::Name() const
 #endif
 }
 
-uint64_t OpenDirIterator::AccessTime() const
+uint64_t OpenDirResult::AccessTime() const
 {
 #ifdef WIN32
 	DWORD low = m_findFileData.ftLastAccessTime.dwLowDateTime;
@@ -167,31 +178,51 @@ uint64_t OpenDirIterator::AccessTime() const
 #endif
 }
 
-uint64_t OpenDirIterator::CreationTime() const
+uint64_t OpenDirResult::CreationTime() const
 {
 #ifdef WIN32
 	DWORD low = m_findFileData.ftCreationTime.dwLowDateTime;
 	DWORD high = m_findFileData.ftCreationTime.dwHighDateTime;
 	return low + (MAXDWORD + 1) * high;
 #endif
+#ifdef LINUX
+	if (DoStat()) {
+		return std::static_cast<uint64_t>(m_stat.st_ctime);
+	else {
+		return 0;
+	}
+#endif
 }
 
-uint64_t OpenDirIterator::ModifyTime() const
+uint64_t OpenDirResult::ModifyTime() const
 {
 #ifdef WIN32
 	DWORD low = m_findFileData.ftLastWriteTime.dwLowDateTime;
 	DWORD high = m_findFileData.ftLastWriteTime.dwHighDateTime;
 	return low + (MAXDWORD + 1) * high;
 #endif
+#ifdef LINUX
+	if (DoStat()) {
+		return std::static_cast<uint64_t>(m_stat.st_mtime);
+	else {
+		return 0;
+	}
+#endif
 }
 
-bool OpenDirIterator::DoStat()
+bool OpenDirResult::DoStat()
 {
 	if (m_stated) {
 		return true;
 	}
-	std::string fullpath = m_dirPath + SEPARATOR + Name();
+#ifdef WIN32
+	const std::string separator = "\\";
+#else
+	const std::string separator = "/";
+#endif
+	std::string fullpath = m_dirPath + separator + Name();
 	if (stat(fullpath.c_str(), &m_stat) < 0) {
+		m_statFailed = true;
 		return false;
 	}
 	m_stated = true;
@@ -202,10 +233,10 @@ bool OpenDirIterator::DoStat()
 
 
 
-std::optional<OpenDirIterator> OpenDir(const std::string& path)
+std::optional<OpenDirResult> OpenDir(const std::string& path)
 {
 #ifdef WIN32
-	OpenDirIterator iterator;
+	OpenDirResult iterator;
 	iterator.m_dirPath = path;
 	iterator.m_fileHandle = ::FindFirstFile(path.c_str(), &iterator.m_findFileData);
 	if (iterator.m_fileHandle == INVALID_HANDLE_VALUE) {
@@ -215,7 +246,7 @@ std::optional<OpenDirIterator> OpenDir(const std::string& path)
 #endif
 
 #ifdef LINUX
-	OpenDirIterator iterator;
+	OpenDirResult iterator;
 	iterator.m_dirPath = path;
 	DIR* dir = ::opendir(path.c_str());
 	if (dir == nullptr) {
@@ -231,10 +262,11 @@ std::optional<OpenDirIterator> OpenDir(const std::string& path)
 	return std::nullopt;
 }
 
-void OpenDirIterator::Next()
+bool OpenDirResult::Next()
 {
 	memset(&m_stat, 0, sizeof(struct stat));
 	m_stated = false;
+	m_statFailed = false;
 #ifdef WIN32
 	if (m_fileHandle == nullptr || m_fileHandle == INVALID_HANDLE_VALUE) {
 		return false;
@@ -254,12 +286,8 @@ void OpenDirIterator::Next()
 #endif
 }
 
-bool OpenDirIterator::HasNext()
-{
 
-}
-
-void OpenDirIterator::Close()
+void OpenDirResult::Close()
 {
 #ifdef WIN32
 	if (m_fileHandle != nullptr && m_fileHandle != INVALID_HANDLE_VALUE) {
