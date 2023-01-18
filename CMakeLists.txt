@@ -3,13 +3,13 @@
 #
 cmake_minimum_required (VERSION 3.8)
 
-project ("FileIOUtil")
+project ("FileSystemUtil")
 
 # 将源代码添加到此项目的可执行文件。
-add_executable (FileIOUtil "FileIOUtil.cpp" "FileIOUtil.h")
+add_executable (FileSystemUtil "FileSystemUtil.cpp" "FileSystemUtil.h" "Demo.cpp")
 
 if (CMAKE_VERSION VERSION_GREATER 3.12)
-  set_property(TARGET FileIOUtil PROPERTY CXX_STANDARD 17)
+  set_property(TARGET FileSystemUtil PROPERTY CXX_STANDARD 17)
 endif()
 
 # TODO: 如有需要，请添加测试并安装目标。

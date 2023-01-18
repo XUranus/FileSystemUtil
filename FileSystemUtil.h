@@ -9,17 +9,31 @@
 #include <Windows.h>
 #endif
 
-#ifdef LINUX
+#ifdef __linux__
 #include <sys/types.h>
+#include <sys/stat.h>
 #include <dirent.h>
+#include <cstring>
 #endif
 
+#ifdef WIN32
+inline uint64_t CombineDWORD(DWORD low, DWORD high) {
+	return (uint64_t)low + ((uint64_t)MAXDWORD + 1) * high;
+}
+#endif
 
-namespace FileIO {
+/**
+* wrap some cross-platform filesystem API
+*/
+namespace FileSystemUtil {
 
+/**
+* wrap stat for LINUX and GetFileInformationByHandle for windows,
+* to provide file meta info query service
+*/
 class StatResult {
 public:
-#ifdef LINUX
+#ifdef __linux__
 	StatResult(const struct stat& statbuff);
 #endif
 
@@ -40,13 +54,14 @@ public:
 	uint64_t ModifyTime() const;
 
 	/**
-	* UNIX fs hardlink file share the same inode, but has no meaning on FAT32/HPFS/NTFS.. fs
+	* UNIX fs hardlink file share the same inode, but inode has no meaning on FAT32/HPFS/NTFS.. fs
+	* Windows use file index to mark a unique id of a file in a volume
 	*/
 	uint64_t UniqueID() const;
 
 	uint64_t Size() const; // size in bytes
-	uint64_t DeviceNmber() const; // no of the disk containning the file
-	uint64_t LinksNumber() const; // no of hard links to the file, on WIN32 always set to 1 on non-NTFS fs
+	uint64_t DeviceID() const; // id of the disk containning the file
+	uint64_t LinksCount() const; // no of hard links to the file, on WIN32 always set to 1 on non-NTFS fs
 
 	bool IsDirectory() const;
 
@@ -60,9 +75,10 @@ public:
 	bool IsReadOnly() const;
 	bool IsSystem() const;
 	bool IsTemporary() const;
+	bool IsNormal() const;
 #endif
 
-#ifdef LINUX
+#ifdef __linux__
 	bool IsRegular() const;
 	bool IsPipe() const;
 	bool IsCharDevice() const;
@@ -72,7 +88,7 @@ public:
 #endif
 
 private:
-#ifdef LINUX
+#ifdef __linux__
 	struct stat m_stat {};
 #endif
 #ifdef WIN32
@@ -80,24 +96,15 @@ private:
 #endif
 };
 
+std::optional<StatResult> Stat(const std::string& path);
+
 
 class OpenDirEntry
 {
 public:
-	bool Next();
-	void Close();
-
-	uint64_t INode();
-	bool IsNormal() const;
-	bool IsDirectory() const;
-	std::string Name() const;
-	uint64_t Size() const;
-	uint64_t AccessTime() const;
-	uint64_t CreationTime() const;
-	uint64_t ModifyTime() const;
-	bool DoStat();
-
 #ifdef WIN32
+	OpenDirEntry(const std::string& dirPath,
+		const WIN32_FIND_DATA& findFileData, const HANDLE& fileHandle);
 	bool IsArchive() const;
 	bool IsCompressed() const;
 	bool IsEncrypted() const;
@@ -107,40 +114,48 @@ public:
 	bool IsReadOnly() const;
 	bool IsSystem() const;
 	bool IsTemporary() const;
+	bool IsNormal() const;
+	uint64_t AccessTime() const;
+	uint64_t CreationTime() const;
+	uint64_t ModifyTime() const;
+	uint64_t Size() const;
 #endif
 
-#ifdef LINUX
+#ifdef __linux__
+	OpenDirEntry(const std::string& dirPath,
+		DIR* dirPtr, struct dirent* direntPtr);
 	bool IsUnknown() const;
 	bool IsPipe() const;
 	bool IsCharDevice() const;
 	bool IsBlockDevice() const;
 	bool IsSymLink() const;
 	bool IsSocket() const;
+	bool IsRegular() const;
+	uint64_t INode() const;
 #endif
 
+	bool IsDirectory() const;
+	std::string Name() const;
+	std::string FullPath() const;
+	bool Next();
+	void Close();
 	// forbid copy
 	OpenDirEntry(const OpenDirEntry&) = delete;
 	OpenDirEntry operator = (const OpenDirEntry&) = delete;
 
 private:
 	std::string m_dirPath;
-	bool m_stated = false;
-	bool m_statFailed = false;
 #ifdef WIN32
 	HANDLE m_fileHandle = nullptr;
 	WIN32_FIND_DATA m_findFileData;
 #endif
 
-#ifdef LINUX
-	struct stat m_stat {};
-	DIR* m_dir;
-	struct dirent* m_dirent;
+#ifdef __linux__
+	DIR* m_dir = nullptr;
+	struct dirent* m_dirent = nullptr;
 #endif
 };
 
-
-
-std::optional<StatResult> Stat(const std::string& path);
 std::optional<OpenDirEntry> OpenDir(const std::string& path);
 }
 
