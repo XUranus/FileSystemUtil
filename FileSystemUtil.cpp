@@ -140,6 +140,7 @@ bool StatResult::IsReadOnly() const { return (m_handleFileInformation.dwFileAttr
 bool StatResult::IsSystem() const { return (m_handleFileInformation.dwFileAttributes & FILE_ATTRIBUTE_SYSTEM) != 0; }
 bool StatResult::IsTemporary() const { return (m_handleFileInformation.dwFileAttributes & FILE_ATTRIBUTE_TEMPORARY) != 0; }
 bool StatResult::IsNormal() const { return (m_handleFileInformation.dwFileAttributes & FILE_ATTRIBUTE_NORMAL) != 0; }
+uint64_t StatResult::Attribute() const { return m_handleFileInformation.dwFileAttributes; }
 #endif
 
 #ifdef __linux__
@@ -149,6 +150,7 @@ bool StatResult::IsCharDevice() const { return (m_stat.st_mode & S_IFCHR) != 0; 
 bool StatResult::IsBlockDevice() const { return (m_stat.st_mode & S_IFBLK) != 0; }
 bool StatResult::IsSymLink() const { return (m_stat.st_mode & S_IFLNK) != 0; }
 bool StatResult::IsSocket() const { return (m_stat.st_mode & S_IFSOCK) != 0; }
+uint64_t StatResult::Mode() const { return m_stat.st_mode; }
 #endif
 
 std::optional<StatResult> Stat(const std::string& path)
@@ -193,6 +195,7 @@ bool OpenDirEntry::IsReadOnly() const { return (m_findFileData.dwFileAttributes 
 bool OpenDirEntry::IsSystem() const { return (m_findFileData.dwFileAttributes & FILE_ATTRIBUTE_SYSTEM) != 0; }
 bool OpenDirEntry::IsTemporary() const { return (m_findFileData.dwFileAttributes & FILE_ATTRIBUTE_TEMPORARY) != 0; }
 bool OpenDirEntry::IsNormal() const { return (m_findFileData.dwFileAttributes & FILE_ATTRIBUTE_NORMAL) != 0; }
+uint64_t OpenDirEntry::Attribute() const { return m_findFileData.dwFileAttributes; }
 
 uint64_t OpenDirEntry::AccessTime() const
 {
@@ -256,11 +259,16 @@ std::string OpenDirEntry::Name() const
 std::string OpenDirEntry::FullPath() const
 {
 #ifdef __linux__
-	return m_dirPath + "/" + Name();
+	const std::string separator = "/";
 #endif
 #ifdef WIN32
-	return m_dirPath + "\\" + Name();
+	const std::string separator = "\\";
 #endif
+	if (!m_dirPath.empty() && m_dirPath.back() == separator[0]) {
+		return m_dirPath + Name();
+	} else {
+		return m_dirPath + separator + Name();
+	}
 }
 
 bool OpenDirEntry::Next()
@@ -331,6 +339,10 @@ std::optional<OpenDirEntry> OpenDir(const std::string& path)
 	}
 	return std::make_optional<OpenDirEntry>(path, dirPtr, direntPtr);
 #endif
+}
+
+OpenDirEntry::~OpenDirEntry() {
+	Close();
 }
 
 }

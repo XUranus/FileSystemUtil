@@ -11,42 +11,44 @@ int main(int argc, char** argv)
 	}
 	std::string path = std::string(argv[1]);
 	std::optional<StatResult> statResult = Stat(path);
-#ifdef WIN32
-	if (!statResult) {
-		std::cout << "stat failed, errcode = " << ::GetLastError() << std::endl;
-		return 1;
-	} else {
-		std::cout << "UniqueID: " << statResult->UniqueID() << std::endl;
-	}
-	std::optional<OpenDirEntry> openDirEntry = OpenDir(path);
-	if (!openDirEntry) {
-		std::cout << "open dir failed, errcode = " << ::GetLastError() << std::endl;
-		return 1;
-	} else {
-		do {
-			std::cout << "Path: " << openDirEntry->FullPath() << std::endl;
-		} while (openDirEntry->Next());
-	}
-#endif
 
-#ifdef __linux__
 	if (!statResult) {
-		std::cout << "stat failed, errcode = " << errno << std::endl;
-		return 1;
-	}
-	else {
-		std::cout << "UniqueID: " << statResult->UniqueID() << std::endl;
-	}
-	std::optional<OpenDirEntry> openDirEntry = OpenDir(path);
-	if (!openDirEntry) {
-		std::cout << "open dir failed, errcode = " << errno << std::endl;
-		return 1;
-	}
-	else {
-		do {
-			std::cout << "Path: " << openDirEntry->FullPath() << std::endl;
-		} while (openDirEntry->Next());
-	}
+#ifdef WIN32
+		std::cout << "stat failed, errcode = " << ::GetLastError() << std::endl;
 #endif
+#ifdef __linux__
+		std::cout << "stat failed, errcode = " << errno << std::endl;
+#endif
+		return 1;
+	}
+	std::cout << "Type: " << (statResult->IsDirectory() ? "Directory" : "File") << std::endl;
+	std::cout << "UniqueID: " << statResult->UniqueID() << std::endl;
+	std::optional<OpenDirEntry> openDirEntry = OpenDir(path);
+	if (statResult->IsDirectory()) {
+		int total = 0;
+		if (!openDirEntry) {
+#ifdef WIN32
+			std::cout << "open dir failed, errcode = " << ::GetLastError() << std::endl;
+#endif
+#ifdef __linux__
+			std::cout << "open dir failed, errcode = " << errno << std::endl;
+#endif
+			return 1;
+		} else {
+			do {
+				std::optional<StatResult> subStatResult = Stat(openDirEntry->FullPath());
+				if (subStatResult) {
+					std::cout
+						<< "UniqueID: " << Stat(openDirEntry->FullPath())->UniqueID() << "\t"
+						<< "Path: " << openDirEntry->FullPath()
+						<< std::endl;
+					total++;
+				} else {
+					std::cout << "Stat " << openDirEntry->FullPath() << " Failed" << std::endl;
+				}
+			} while (openDirEntry->Next());
+		}
+		std::cout << "Total SubItems = " << total << std::endl;
+	}
 	return 0;
 }

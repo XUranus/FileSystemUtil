@@ -76,6 +76,7 @@ public:
 	bool IsSystem() const;
 	bool IsTemporary() const;
 	bool IsNormal() const;
+	uint64_t Attribute() const;
 #endif
 
 #ifdef __linux__
@@ -85,6 +86,7 @@ public:
 	bool IsBlockDevice() const;
 	bool IsSymLink() const;
 	bool IsSocket() const;
+	uint64_t Mode() const;
 #endif
 
 private:
@@ -119,6 +121,7 @@ public:
 	uint64_t CreationTime() const;
 	uint64_t ModifyTime() const;
 	uint64_t Size() const;
+	uint64_t Attribute() const;
 #endif
 
 #ifdef __linux__
@@ -139,9 +142,10 @@ public:
 	std::string FullPath() const;
 	bool Next();
 	void Close();
-	// forbid copy
+	/* disable copy/assign construct */
 	OpenDirEntry(const OpenDirEntry&) = delete;
 	OpenDirEntry operator = (const OpenDirEntry&) = delete;
+	~OpenDirEntry();
 
 private:
 	std::string m_dirPath;
