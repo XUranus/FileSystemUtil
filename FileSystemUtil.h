@@ -23,7 +23,7 @@ inline uint64_t CombineDWORD(DWORD low, DWORD high) {
 #endif
 
 /**
-* wrap some cross-platform filesystem API
+* wrap some cross-platform filesystem API for Windows/LINUX
 */
 namespace FileSystemUtil {
 
@@ -55,17 +55,18 @@ public:
 
 	/**
 	* UNIX fs hardlink file share the same inode, but inode has no meaning on FAT32/HPFS/NTFS.. fs
-	* Windows use file index to mark a unique id of a file in a volume
+	* Windows use "file index" to mark a unique id of a file or a directory in a volume
 	*/
 	uint64_t UniqueID() const;
 
-	uint64_t Size() const; // size in bytes
-	uint64_t DeviceID() const; // id of the disk containning the file
-	uint64_t LinksCount() const; // no of hard links to the file, on WIN32 always set to 1 on non-NTFS fs
+	uint64_t Size() const; /* size in bytes */
+	uint64_t DeviceID() const; /* id of the disk containning the file */
+	uint64_t LinksCount() const; /* no of hard links to the file, on WIN32 always set to 1 on non - NTFS fs */
 
 	bool IsDirectory() const;
 
 #ifdef WIN32
+	/* based on dwFileAttributes field */
 	bool IsArchive() const;
 	bool IsCompressed() const;
 	bool IsEncrypted() const;
@@ -80,6 +81,7 @@ public:
 #endif
 
 #ifdef __linux__
+	/* based on st_mode field */
 	bool IsRegular() const;
 	bool IsPipe() const;
 	bool IsCharDevice() const;
@@ -142,6 +144,7 @@ public:
 	std::string FullPath() const;
 	bool Next();
 	void Close();
+	
 	/* disable copy/assign construct */
 	OpenDirEntry(const OpenDirEntry&) = delete;
 	OpenDirEntry operator = (const OpenDirEntry&) = delete;
@@ -164,21 +167,3 @@ std::optional<OpenDirEntry> OpenDir(const std::string& path);
 }
 
 #endif
-
-/*
- reference:
- https://www.cnblogs.com/collectionne/p/6792301.html
- https://learn.microsoft.com/en-us/previous-versions/aa914427(v=msdn.10)
- https://blog.csdn.net/weixin_47679859/article/details/126836727
- https://blog.csdn.net/qq_37858386/article/details/121424783
- https://blog.csdn.net/lj19990824/article/details/120046241
- https://www.bbsmax.com/A/E35poVvgJv/
- https://www.writebug.com/git/Carryme/FileSearch
- https://learn.microsoft.com/en-us/cpp/c-runtime-library/reference/stat-functions?view=msvc-170
- https://learn.microsoft.com/en-us/cpp/c-runtime-library/stat-structure-st-mode-field-constants?view=msvc-170
- https://learn.microsoft.com/en-us/windows/win32/fileio/file-attribute-constants
- https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-getfileinformationbyhandle
- https://learn.microsoft.com/en-us/windows/win32/api/fileapi/ns-fileapi-by_handle_file_information
- https://learn.microsoft.com/en-us/windows/win32/fileio/file-attribute-constants
- https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-getfileinformationbyhandle
- */
