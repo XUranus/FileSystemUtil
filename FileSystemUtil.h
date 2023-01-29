@@ -1,11 +1,13 @@
-﻿#ifndef __FILE_IO_UTIL_H__
-#define __FILE_IO_UTIL_H__
+﻿#ifndef __XURANUS_FILESYSTEM_UTIL_H__
+#define __XURANUS_FILESYSTEM_UTIL_H__
 
+#include <string>
 #include <iostream>
 #include <iterator>
 #include <optional>
 
 #ifdef WIN32
+#define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
 #endif
 

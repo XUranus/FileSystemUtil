@@ -99,6 +99,9 @@ int DoListCommand(const std::string& path)
 	}
 	else {
 		do {
+			if (openDirEntry->Name() == "." || openDirEntry->Name() == "..") {
+				continue;
+			}
 			std::optional<StatResult> subStatResult = Stat(openDirEntry->FullPath());
 			if (subStatResult) {
 				std::cout
