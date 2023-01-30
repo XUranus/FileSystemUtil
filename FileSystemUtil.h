@@ -24,15 +24,15 @@ inline uint64_t CombineDWORD(DWORD low, DWORD high) {
 	return (uint64_t)low + ((uint64_t)MAXDWORD + 1) * high;
 }
 
-uint64_t ConvertWin32TimeToSeconds(DWORD low, DWORD high)
+inline uint64_t ConvertWin32TimeToSeconds(DWORD low, DWORD high)
 {
-		const uint64_t UNIX_TIME_START = 0x019DB1DED53E8000; /* January 1, 1970 (start of Unix epoch) in "ticks" */
+	const uint64_t UNIX_TIME_START = 0x019DB1DED53E8000; /* January 1, 1970 (start of Unix epoch) in "ticks" */
    	const uint64_t TICKS_PER_SECOND = 10000000; /* a tick is 100ns */
-	  LARGE_INTEGER li;
-  	li.LowPart  = ft.low;
-   	li.HighPart = ft.high;
+	LARGE_INTEGER li;
+  	li.LowPart  = low;
+   	li.HighPart = high;
   	/* Convert ticks since 1/1/1970 into seconds */
-   	return (li.QuadPart - UNIX_TIME_START); / TICKS_PER_SECOND;
+   	return (li.QuadPart - UNIX_TIME_START) / TICKS_PER_SECOND;
 }
 #endif
 
