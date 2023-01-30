@@ -345,4 +345,26 @@ OpenDirEntry::~OpenDirEntry() {
 	Close();
 }
 
+#ifdef WIN32
+std::vector<std::string> GetVolumesList()
+{
+	std::vector<std::string> volumes;
+	DWORD dwLen = ::GetLogicalDriveStrings(0, nullptr); /* the length of volumes str */
+	if (dwLen <= 0) {
+		return volumes;
+	}
+	char* pszDriver = new char[dwLen];
+	::GetLogicalDriveStrings(dwLen, pszDriver);
+	char* pDriver = pszDriver;
+	while (*pDriver != '\0') {
+		volumes.push_back(std::string(pDriver));
+		pDriver += ::strlen(pDriver) + 1;
+	}
+	delete[] pszDriver;
+	pszDriver = nullptr;
+	pDriver = nullptr;
+	return volumes;
+}
+#endif
+
 }

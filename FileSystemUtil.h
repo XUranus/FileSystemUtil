@@ -4,6 +4,7 @@
 #include <iostream>
 #include <iterator>
 #include <optional>
+#include <vector>
 
 #ifdef WIN32
 #include <Windows.h>
@@ -164,6 +165,11 @@ private:
 };
 
 std::optional<OpenDirEntry> OpenDir(const std::string& path);
+
+#ifdef WIN32
+std::vector<std::string> GetVolumesList();
+#endif
+
 }
 
 #endif

@@ -50,6 +50,7 @@ void PrintHelp()
 	std::cout << "Usage: " << std::endl;
 	std::cout << "fsutil -l <directory path> \t: list subdirectory/file of a directory" << std::endl;
 	std::cout << "fsutil -s <path> \t\t: print the detail info of directory/file" << std::endl;
+	std::cout << "fsutil --volumes \t\t: list volumes" << std::endl;
 }
 
 int DoStatCommand(const std::string& path)
@@ -117,6 +118,17 @@ int DoListCommand(const std::string& path)
 	return 0;
 }
 
+void ListWin32Volumes()
+{
+#ifdef WIN32
+	std::vector<std::string> volumes = GetVolumesList();
+	for (const std::string& volume: volumes) {
+		std::cout << volume << std::endl;
+	}
+#endif
+	return;
+}
+
 int main(int argc, char** argv)
 {
 	if (argc < 2) {
@@ -131,6 +143,9 @@ int main(int argc, char** argv)
 			return DoListCommand(std::string(argv[i + 1]));
 		} else if (std::string(argv[i]) == "-s" && i + 1 < argc) {
 			return DoStatCommand(std::string(argv[i + 1]));
+		} else if (std::string(argv[i]) == "--volume") {
+			ListWin32Volumes();
+			return 0;
 		} else {
 			return DoStatCommand(std::string(argv[i]));
 		}
