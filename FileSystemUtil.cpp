@@ -50,7 +50,7 @@ uint64_t StatResult::AccessTime() const
 	return static_cast<uint64_t>(m_stat.st_atime);
 #endif
 #ifdef WIN32
-	return CombineDWORD(m_handleFileInformation.ftLastAccessTime.dwLowDateTime,
+	return ConvertWin32TimeToSeconds(m_handleFileInformation.ftLastAccessTime.dwLowDateTime,
 		m_handleFileInformation.ftLastAccessTime.dwHighDateTime);
 #endif
 }
@@ -61,7 +61,7 @@ uint64_t StatResult::CreationTime() const
 	return static_cast<uint64_t>(m_stat.st_ctime);
 #endif
 #ifdef WIN32
-	return CombineDWORD(m_handleFileInformation.ftCreationTime.dwLowDateTime,
+	return ConvertWin32TimeToSeconds(m_handleFileInformation.ftCreationTime.dwLowDateTime,
 		m_handleFileInformation.ftCreationTime.dwHighDateTime);
 #endif
 }
@@ -72,7 +72,7 @@ uint64_t StatResult::ModifyTime() const
 	return static_cast<uint64_t>(m_stat.st_mtime);
 #endif
 #ifdef WIN32
-	return CombineDWORD(m_handleFileInformation.ftLastWriteTime.dwLowDateTime,
+	return ConvertWin32TimeToSeconds(m_handleFileInformation.ftLastWriteTime.dwLowDateTime,
 		m_handleFileInformation.ftLastWriteTime.dwHighDateTime);
 #endif
 }
@@ -199,19 +199,19 @@ uint64_t OpenDirEntry::Attribute() const { return m_findFileData.dwFileAttribute
 
 uint64_t OpenDirEntry::AccessTime() const
 {
-	return CombineDWORD(m_findFileData.ftLastAccessTime.dwLowDateTime,
+	return ConvertWin32TimeToSeconds(m_findFileData.ftLastAccessTime.dwLowDateTime,
 		m_findFileData.ftLastAccessTime.dwHighDateTime);
 }
 
 uint64_t OpenDirEntry::CreationTime() const
 {
-	return CombineDWORD(m_findFileData.ftCreationTime.dwLowDateTime,
+	return ConvertWin32TimeToSeconds(m_findFileData.ftCreationTime.dwLowDateTime,
 		m_findFileData.ftCreationTime.dwHighDateTime);
 }
 
 uint64_t OpenDirEntry::ModifyTime() const
 {
-	return CombineDWORD(m_findFileData.ftLastWriteTime.dwLowDateTime,
+	return ConvertWin32TimeToSeconds(m_findFileData.ftLastWriteTime.dwLowDateTime,
 		m_findFileData.ftLastWriteTime.dwHighDateTime);
 }
 
