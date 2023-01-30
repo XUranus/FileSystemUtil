@@ -1,12 +1,14 @@
-﻿#ifndef __FILE_IO_UTIL_H__
-#define __FILE_IO_UTIL_H__
+﻿#ifndef __XURANUS_FILESYSTEM_UTIL_H__
+#define __XURANUS_FILESYSTEM_UTIL_H__
 
+#include <string>
 #include <iostream>
 #include <iterator>
 #include <optional>
 #include <vector>
 
 #ifdef WIN32
+#define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
 #endif
 
@@ -20,6 +22,17 @@
 #ifdef WIN32
 inline uint64_t CombineDWORD(DWORD low, DWORD high) {
 	return (uint64_t)low + ((uint64_t)MAXDWORD + 1) * high;
+}
+
+uint64_t ConvertWin32TimeToSeconds(DWORD low, DWORD high)
+{
+		const uint64_t UNIX_TIME_START = 0x019DB1DED53E8000; /* January 1, 1970 (start of Unix epoch) in "ticks" */
+   	const uint64_t TICKS_PER_SECOND = 10000000; /* a tick is 100ns */
+	  LARGE_INTEGER li;
+  	li.LowPart  = ft.low;
+   	li.HighPart = ft.high;
+  	/* Convert ticks since 1/1/1970 into seconds */
+   	return (li.QuadPart - UNIX_TIME_START); / TICKS_PER_SECOND;
 }
 #endif
 
