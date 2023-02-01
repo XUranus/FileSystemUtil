@@ -1,10 +1,34 @@
 ﻿#include <iostream>
 #include <optional>
 #include <fstream>
+#include <chrono>
+
+#ifdef WIN32
+#pragma execution_character_set("utf-8")
+#endif
 
 #include "FileSystemUtil.h"
 
 using namespace FileSystemUtil;
+
+std::string TimestamoSecondsToDate(uint64_t timestamp)
+{
+	auto millsec = std::chrono::seconds(timestamp);
+	auto tp = std::chrono::time_point<
+		std::chrono::system_clock, std::chrono::seconds>(millsec);
+	auto tt = std::chrono::system_clock::to_time_t(tp);
+	std::tm* now = std::gmtime(&tt);
+	int year = now->tm_year + 1900;
+	int month = now->tm_mon + 1;
+	int day = now->tm_mday;
+	int hour = now->tm_hour;
+	int minute = now->tm_min;
+	int second = now->tm_sec;
+	char buff[20] = { '\0' };
+	::snprintf(buff, sizeof(buff), "%04d-%02d-%02d %02d:%02d:%02d",
+		year, month, day, hour, minute, second);
+	return std::string(buff);
+}
 
 #ifdef WIN32
 std::string Win32FileAttributeFlagsToString(const StatResult& statResult)
@@ -52,7 +76,9 @@ void PrintHelp()
 	std::cout << "Usage: " << std::endl;
 	std::cout << "fsutil -l <directory path> \t: list subdirectory/file of a directory" << std::endl;
 	std::cout << "fsutil -s <path> \t\t: print the detail info of directory/file" << std::endl;
+#ifdef WIN32
 	std::cout << "fsutil --volumes \t\t: list volumes" << std::endl;
+#endif
 }
 
 int DoStatCommand(const std::string& path)
@@ -73,9 +99,9 @@ int DoStatCommand(const std::string& path)
 	std::cout << "Size: \t\t" << statResult->Size() << std::endl;
 	std::cout << "Device: \t" << statResult->DeviceID() << std::endl;
 	std::cout << "Links: \t\t" << statResult->LinksCount() << std::endl;
-	std::cout << "Atime: \t\t" << statResult->AccessTime() << std::endl;
-	std::cout << "CTime: \t\t" << statResult->CreationTime() << std::endl;
-	std::cout << "MTime: \t\t" << statResult->ModifyTime() << std::endl;
+	std::cout << "Atime: \t\t" << TimestamoSecondsToDate(statResult->AccessTime())  << std::endl;
+	std::cout << "CTime: \t\t" << TimestamoSecondsToDate(statResult->CreationTime()) << std::endl;
+	std::cout << "MTime: \t\t" << TimestamoSecondsToDate(statResult->ModifyTime()) << std::endl;
 #ifdef WIN32
 	std::cout << "Attr: \t\t" << statResult->Attribute() << std::endl;
 	std::cout << "Flags: \t\t" << Win32FileAttributeFlagsToString(statResult.value()) << std::endl;
@@ -134,6 +160,39 @@ void ListWin32Volumes()
 	return;
 }
 
+#ifdef WIN32
+
+int wmain(int argc, WCHAR** argv)
+{
+	::SetConsoleOutputCP(65001); // forcing cmd to use UTF-8 output encoding
+	if (argc < 2) {
+		PrintHelp();
+		std::wcout << L"insufficient paramaters" << std::endl;
+		return 1;
+	}
+	bool commandExecuted = false;
+	for (int i = 1; i < argc; ++i) {
+		if (std::wstring(argv[i]) == L"-l" && i + 1 < argc) {
+			return DoListCommand(Utf16ToUtf8(std::wstring(argv[i + 1])));
+		}
+		else if (std::wstring(argv[i]) == L"-s" && i + 1 < argc) {
+			return DoStatCommand(Utf16ToUtf8(std::wstring(argv[i + 1])));
+		}
+		else if (std::wstring(argv[i]) == L"--volumes") {
+			ListWin32Volumes();
+			return 0;
+		}
+		else {
+			return DoStatCommand(Utf16ToUtf8(std::wstring(argv[i])));
+		}
+}
+PrintHelp();
+std::cout << "invalid parameters";
+return 1;
+}
+
+#else
+
 int main(int argc, char** argv)
 {
 	if (argc < 2) {
@@ -141,16 +200,12 @@ int main(int argc, char** argv)
 		std::cout << "insufficient paramaters" << std::endl;
 		return 1;
 	}
-	std::string path;
 	bool commandExecuted = false;
 	for (int i = 1; i < argc; ++i) {
 		if (std::string(argv[i]) == "-l" && i + 1 < argc) {
 			return DoListCommand(std::string(argv[i + 1]));
 		} else if (std::string(argv[i]) == "-s" && i + 1 < argc) {
 			return DoStatCommand(std::string(argv[i + 1]));
-		} else if (std::string(argv[i]) == "--volumes") {
-			ListWin32Volumes();
-			return 0;
 		} else {
 			return DoStatCommand(std::string(argv[i]));
 		}
@@ -159,3 +214,5 @@ int main(int argc, char** argv)
 	std::cout << "invalid parameters";
 	return 1;
 }
+
+#endif
