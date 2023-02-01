@@ -9,6 +9,7 @@
 
 #ifdef WIN32
 #define WIN32_LEAN_AND_MEAN
+#define UNICODE
 #include <Windows.h>
 #endif
 
@@ -40,6 +41,9 @@ inline uint64_t ConvertWin32TimeToSeconds(DWORD low, DWORD high)
 * wrap some cross-platform filesystem API for Windows/LINUX
 */
 namespace FileSystemUtil {
+
+std::wstring Utf8ToUtf16(const std::string& str);
+std::string Utf16ToUtf8(const std::wstring& wstr);
 
 /**
 * wrap stat for LINUX and GetFileInformationByHandle for windows,
@@ -122,7 +126,7 @@ class OpenDirEntry
 public:
 #ifdef WIN32
 	OpenDirEntry(const std::string& dirPath,
-		const WIN32_FIND_DATA& findFileData, const HANDLE& fileHandle);
+		const WIN32_FIND_DATAW& findFileData, const HANDLE& fileHandle);
 	bool IsArchive() const;
 	bool IsCompressed() const;
 	bool IsEncrypted() const;
@@ -154,6 +158,10 @@ public:
 #endif
 
 	bool IsDirectory() const;
+#ifdef WIN32
+	std::wstring NameW() const;
+	std::wstring FullPathW() const;
+#endif
 	std::string Name() const;
 	std::string FullPath() const;
 	bool Next();
@@ -165,13 +173,14 @@ public:
 	~OpenDirEntry();
 
 private:
-	std::string m_dirPath;
 #ifdef WIN32
+	std::wstring m_dirPath;
 	HANDLE m_fileHandle = nullptr;
-	WIN32_FIND_DATA m_findFileData;
+	WIN32_FIND_DATAW m_findFileData;
 #endif
 
 #ifdef __linux__
+	std::string m_dirPath;
 	DIR* m_dir = nullptr;
 	struct dirent* m_dirent = nullptr;
 #endif
@@ -180,6 +189,7 @@ private:
 std::optional<OpenDirEntry> OpenDir(const std::string& path);
 
 #ifdef WIN32
+std::vector<std::wstring> GetVolumesListW();
 std::vector<std::string> GetVolumesList();
 #endif
 

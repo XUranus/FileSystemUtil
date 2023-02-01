@@ -1,5 +1,8 @@
-#include <iostream>
+﻿#include <iostream>
+#include <io.h>
+#include <fcntl.h>
 #include <optional>
+#include <fstream>
 #include "FileSystemUtil.h"
 
 using namespace FileSystemUtil;
@@ -111,6 +114,18 @@ int DoListCommand(const std::string& path)
 					<< "Path: " << openDirEntry->FullPath()
 					<< std::endl;
 				total++;
+
+
+
+				std::ofstream fout(R"(C:\Users\王星校\source\repos\FileIOUtil\build\Debug\out)", std::ios_base::app);
+
+				if (!fout.is_open()) {
+					std::cout << "fail" << std::endl;
+				}
+				else {
+					std::cout << "writed" << std::endl;
+				}
+				fout << openDirEntry->Name() << std::endl;
 			}
 			else {
 				std::cout << "Stat " << openDirEntry->FullPath() << " Failed" << std::endl;
@@ -134,6 +149,11 @@ void ListWin32Volumes()
 
 int main(int argc, char** argv)
 {
+//	_setmode(_fileno(stdout), _O_U8TEXT);
+//	std::wstring x = L"😊.txt";
+//	std::wcout << x.length() << std::endl;
+//	std::wcout << x << std::endl;
+//	return 0;
 	if (argc < 2) {
 		PrintHelp();
 		std::cout << "insufficient paramaters" << std::endl;

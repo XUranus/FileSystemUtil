@@ -1,5 +1,11 @@
 ﻿#include "FileSystemUtil.h"
 
+#ifdef WIN32
+#define _SILENCE_CXX17_CODECVT_HEADER_DEPRECATION_WARNING 1
+#include <locale>
+#include <codecvt>
+#endif
+
 using namespace std;
 
 namespace {
@@ -8,6 +14,29 @@ constexpr auto WIN32_GID = 0;
 }
 
 namespace FileSystemUtil {
+
+
+#ifdef WIN32
+std::wstring Utf8ToUtf16(const std::string& str)
+{
+	using convert_typeX = std::codecvt_utf8<wchar_t>;
+	std::wstring_convert<convert_typeX, wchar_t> converterX;
+	return converterX.from_bytes(str);
+}
+
+std::string Utf16ToUtf8(const std::wstring& wstr)
+{
+	//using convert_typeX = std::codecvt_utf8<wchar_t>;
+	//std::wstring_convert<convert_typeX, wchar_t> converterX;
+	
+	//std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>, wchar_t> converterX;
+	
+	std::wstring_convert<std::codecvt_utf8<wchar_t>, wchar_t> converterX;
+	return converterX.to_bytes(wstr);
+}
+#endif // 
+
+
 
 #ifdef __linux__
 StatResult::StatResult(const struct stat& statbuff)
@@ -164,7 +193,8 @@ std::optional<StatResult> Stat(const std::string& path)
 #endif
 #ifdef WIN32
 	BY_HANDLE_FILE_INFORMATION handleFileInformation{};
-	HANDLE hFile = ::CreateFile(path.c_str(), GENERIC_READ,
+	std::wstring wpath = Utf8ToUtf16(path);
+	HANDLE hFile = ::CreateFileW(wpath.c_str(), GENERIC_READ,
 		FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, 0);
 	if (hFile == nullptr || hFile == INVALID_HANDLE_VALUE) {
 		return std::nullopt;
@@ -182,8 +212,8 @@ std::optional<StatResult> Stat(const std::string& path)
 
 
 #ifdef WIN32
-OpenDirEntry::OpenDirEntry(const std::string& dirPath, const WIN32_FIND_DATA& findFileData, const HANDLE& fileHandle)
-	:m_dirPath(dirPath), m_findFileData(findFileData), m_fileHandle(fileHandle) {}
+OpenDirEntry::OpenDirEntry(const std::string& dirPath, const WIN32_FIND_DATAW& findFileData, const HANDLE& fileHandle)
+	:m_dirPath(Utf8ToUtf16(dirPath)), m_findFileData(findFileData), m_fileHandle(fileHandle) {}
 
 bool OpenDirEntry::IsArchive() const {	return (m_findFileData.dwFileAttributes & FILE_ATTRIBUTE_ARCHIVE) != 0; }
 bool OpenDirEntry::IsCompressed() const { return (m_findFileData.dwFileAttributes & FILE_ATTRIBUTE_COMPRESSED) != 0; }
@@ -249,7 +279,7 @@ bool OpenDirEntry::IsDirectory() const
 std::string OpenDirEntry::Name() const
 {
 #ifdef WIN32
-	return std::string(m_findFileData.cFileName);
+	return Utf16ToUtf8(std::wstring(m_findFileData.cFileName));
 #endif
 #ifdef __linux__
 	return std::string(m_dirent->d_name);
@@ -260,16 +290,40 @@ std::string OpenDirEntry::FullPath() const
 {
 #ifdef __linux__
 	const std::string separator = "/";
-#endif
-#ifdef WIN32
-	const std::string separator = "\\";
-#endif
 	if (!m_dirPath.empty() && m_dirPath.back() == separator[0]) {
 		return m_dirPath + Name();
-	} else {
+	}
+	else {
 		return m_dirPath + separator + Name();
 	}
+#endif
+#ifdef WIN32
+	std::wstring wfullpath = FullPathW();
+	return Utf16ToUtf8(wfullpath);
+#endif
 }
+
+#ifdef WIN32
+
+std::wstring OpenDirEntry::NameW() const
+{
+	return std::wstring(m_findFileData.cFileName);
+}
+
+std::wstring OpenDirEntry::FullPathW() const
+{
+	const std::wstring separator = L"\\";
+	std::wstring wfullpath;
+	if (!m_dirPath.empty() && m_dirPath.back() == separator[0]) {
+		wfullpath = m_dirPath + NameW();
+	}
+	else {
+		wfullpath = m_dirPath + separator + NameW();
+	}
+	return wfullpath;
+}
+
+#endif
 
 bool OpenDirEntry::Next()
 {
@@ -277,7 +331,7 @@ bool OpenDirEntry::Next()
 	if (m_fileHandle == nullptr || m_fileHandle == INVALID_HANDLE_VALUE) {
 		return false;
 	}
-	if (!::FindNextFile(m_fileHandle, &m_findFileData)) {
+	if (!::FindNextFileW(m_fileHandle, &m_findFileData)) {
 		m_fileHandle = nullptr;
 		return false;
 	}
@@ -315,14 +369,13 @@ void OpenDirEntry::Close()
 std::optional<OpenDirEntry> OpenDir(const std::string& path)
 {
 #ifdef WIN32
-	std::string pathPattern = path;
-	if (!pathPattern.empty() && pathPattern.back() != '\\') {
-		pathPattern.push_back('\\');
+	std::wstring wpathPattern = Utf8ToUtf16(path);
+	if (!wpathPattern.empty() && wpathPattern.back() != L'\\') {
+		wpathPattern.push_back(L'\\');
 	}
-	pathPattern += "*.*";
-	std::cout << "pattern " << pathPattern << std::endl;
-	WIN32_FIND_DATA findFileData{};
-	HANDLE fileHandle = ::FindFirstFile(pathPattern.c_str(), &findFileData);
+	wpathPattern += L"*.*";
+	WIN32_FIND_DATAW findFileData{};
+	HANDLE fileHandle = ::FindFirstFileW(wpathPattern.c_str(), &findFileData);
 	if (fileHandle == INVALID_HANDLE_VALUE || fileHandle == nullptr) {
 		return std::nullopt;
 	}
@@ -346,25 +399,37 @@ OpenDirEntry::~OpenDirEntry() {
 }
 
 #ifdef WIN32
-std::vector<std::string> GetVolumesList()
+std::vector<std::wstring> GetVolumesListW()
 {
-	std::vector<std::string> volumes;
+	std::vector<std::wstring> wvolumes;
 	DWORD dwLen = ::GetLogicalDriveStrings(0, nullptr); /* the length of volumes str */
 	if (dwLen <= 0) {
-		return volumes;
+		return wvolumes;
 	}
-	char* pszDriver = new char[dwLen];
-	::GetLogicalDriveStrings(dwLen, pszDriver);
-	char* pDriver = pszDriver;
+	wchar_t* pszDriver = new wchar_t[dwLen];
+	::GetLogicalDriveStringsW(dwLen, pszDriver);
+	wchar_t* pDriver = pszDriver;
 	while (*pDriver != '\0') {
-		volumes.push_back(std::string(pDriver));
-		pDriver += ::strlen(pDriver) + 1;
+		std::wstring wVolume = std::wstring(pDriver);
+		wvolumes.push_back(wVolume);
+		pDriver += wVolume.length() + 1;
 	}
 	delete[] pszDriver;
 	pszDriver = nullptr;
 	pDriver = nullptr;
+	return wvolumes;
+}
+
+std::vector<std::string> GetVolumesList()
+{
+	std::vector<std::string> volumes;
+	std::vector<std::wstring> wvolumes = GetVolumesListW();
+	for (const std::wstring& wvolume : wvolumes) {
+		volumes.push_back(Utf16ToUtf8(wvolume));
+	}
 	return volumes;
 }
+
 #endif
 
 }
