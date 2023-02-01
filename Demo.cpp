@@ -11,7 +11,7 @@
 
 using namespace FileSystemUtil;
 
-std::string TimestamoSecondsToDate(uint64_t timestamp)
+std::string TimestampSecondsToDate(uint64_t timestamp)
 {
 	auto millsec = std::chrono::seconds(timestamp);
 	auto tp = std::chrono::time_point<
@@ -99,9 +99,9 @@ int DoStatCommand(const std::string& path)
 	std::cout << "Size: \t\t" << statResult->Size() << std::endl;
 	std::cout << "Device: \t" << statResult->DeviceID() << std::endl;
 	std::cout << "Links: \t\t" << statResult->LinksCount() << std::endl;
-	std::cout << "Atime: \t\t" << TimestamoSecondsToDate(statResult->AccessTime())  << std::endl;
-	std::cout << "CTime: \t\t" << TimestamoSecondsToDate(statResult->CreationTime()) << std::endl;
-	std::cout << "MTime: \t\t" << TimestamoSecondsToDate(statResult->ModifyTime()) << std::endl;
+	std::cout << "Atime: \t\t" << TimestampSecondsToDate(statResult->AccessTime())  << std::endl;
+	std::cout << "CTime: \t\t" << TimestampSecondsToDate(statResult->CreationTime()) << std::endl;
+	std::cout << "MTime: \t\t" << TimestampSecondsToDate(statResult->ModifyTime()) << std::endl;
 #ifdef WIN32
 	std::cout << "Attr: \t\t" << statResult->Attribute() << std::endl;
 	std::cout << "Flags: \t\t" << Win32FileAttributeFlagsToString(statResult.value()) << std::endl;
