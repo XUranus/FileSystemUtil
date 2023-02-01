@@ -19,22 +19,18 @@ namespace FileSystemUtil {
 #ifdef WIN32
 std::wstring Utf8ToUtf16(const std::string& str)
 {
-	using convert_typeX = std::codecvt_utf8<wchar_t>;
-	std::wstring_convert<convert_typeX, wchar_t> converterX;
+	using ConvertTypeX = std::codecvt_utf8_utf16<wchar_t>;
+	std::wstring_convert<ConvertTypeX, wchar_t> converterX;
 	return converterX.from_bytes(str);
 }
 
 std::string Utf16ToUtf8(const std::wstring& wstr)
 {
-	//using convert_typeX = std::codecvt_utf8<wchar_t>;
-	//std::wstring_convert<convert_typeX, wchar_t> converterX;
-	
-	//std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>, wchar_t> converterX;
-	
-	std::wstring_convert<std::codecvt_utf8<wchar_t>, wchar_t> converterX;
+	using ConvertTypeX = std::codecvt_utf8_utf16<wchar_t>;
+	std::wstring_convert<ConvertTypeX, wchar_t> converterX;
 	return converterX.to_bytes(wstr);
 }
-#endif // 
+#endif
 
 
 

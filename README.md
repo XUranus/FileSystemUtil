@@ -19,4 +19,5 @@ cmake --build .
 ```
 fsutil -l <directory path>    ----  list subdirectory/file of a directory
 fsutil -s <path>              ----  print the detail info of directory/file
+fsutil --volumes			  ----  list volumes
 ```

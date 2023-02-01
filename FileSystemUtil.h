@@ -9,7 +9,7 @@
 
 #ifdef WIN32
 #define WIN32_LEAN_AND_MEAN
-#define UNICODE
+#define UNICODE /* foring using WCHAR on windows */
 #include <Windows.h>
 #endif
 
@@ -42,8 +42,14 @@ inline uint64_t ConvertWin32TimeToSeconds(DWORD low, DWORD high)
 */
 namespace FileSystemUtil {
 
+#ifdef WIN32
+/* 
+ * transform between UTF-8 and UTF-16
+ * any method using win32 API passing WCHAR
+ */
 std::wstring Utf8ToUtf16(const std::string& str);
 std::string Utf16ToUtf8(const std::wstring& wstr);
+#endif
 
 /**
 * wrap stat for LINUX and GetFileInformationByHandle for windows,
