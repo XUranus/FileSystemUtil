@@ -174,8 +174,9 @@ void ListWin32Volumes()
 		}
 		if (volumeDetail.GetVolumePathListW()) {
 			int index = 0;
-			for (const std::wstring& wPath : volumeDetail.GetVolumePathListW().value()) {
-				std::wcout << L"Device" << ++index << L": \t\t" << wPath << std::endl;
+			std::vector<std::wstring> wPathList = volumeDetail.GetVolumePathListW().value();
+			for (const std::wstring& wPath : wPathList) {
+				std::wcout << L"Path" << ++index << L": \t\t" << wPath << std::endl;
 			}
 		}
 		std::wcout << std::endl;
