@@ -202,9 +202,25 @@ private:
 
 std::optional<OpenDirEntry> OpenDir(const std::string& path);
 
+
 #ifdef WIN32
-std::vector<std::wstring> GetVolumesListW();
-std::vector<std::string> GetVolumesList();
+std::vector<std::wstring> GetWin32DriverListW();
+std::vector<std::string> GetWin32DriverList();
+
+class Win32VolumesDetail {
+public:
+	Win32VolumesDetail(const std::wstring& wVolumeName);
+	std::wstring VolumeNameW() const;
+	std::string VolumeName() const;
+	std::optional<std::wstring> GetVolumeDeviceNameW();
+	std::optional<std::string> GetVolumeDeviceName();
+	std::optional<std::vector<std::wstring>> GetVolumePathListW();
+	std::optional<std::vector<std::string>> GetVolumePathList();
+private:
+	std::wstring m_wVolumeName;
+};
+
+std::optional<std::vector<Win32VolumesDetail>> GetWin32VolumeList();
 #endif
 
 }

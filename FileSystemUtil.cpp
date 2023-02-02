@@ -9,8 +9,13 @@
 using namespace std;
 
 namespace {
+#ifdef WIN32
 constexpr auto WIN32_UID = 0;
 constexpr auto WIN32_GID = 0;
+constexpr auto VOLUME_BUFFER_MAX_LEN = MAX_PATH;
+constexpr auto VOLUME_PATH_MAX_LEN = MAX_PATH + 1;
+constexpr auto DEVICE_BUFFER_MAX_LEN = MAX_PATH;
+#endif
 }
 
 namespace FileSystemUtil {
@@ -212,12 +217,12 @@ std::optional<StatResult> Stat(const std::string& path)
 OpenDirEntry::OpenDirEntry(const std::string& dirPath, const WIN32_FIND_DATAW& findFileData, const HANDLE& fileHandle)
 	:m_dirPath(Utf8ToUtf16(dirPath)), m_findFileData(findFileData), m_fileHandle(fileHandle) {}
 
-bool OpenDirEntry::IsArchive() const {	return (m_findFileData.dwFileAttributes & FILE_ATTRIBUTE_ARCHIVE) != 0; }
+bool OpenDirEntry::IsArchive() const { return (m_findFileData.dwFileAttributes & FILE_ATTRIBUTE_ARCHIVE) != 0; }
 bool OpenDirEntry::IsCompressed() const { return (m_findFileData.dwFileAttributes & FILE_ATTRIBUTE_COMPRESSED) != 0; }
 bool OpenDirEntry::IsEncrypted() const { return (m_findFileData.dwFileAttributes & FILE_ATTRIBUTE_ENCRYPTED) != 0; }
 bool OpenDirEntry::IsSparseFile() const { return (m_findFileData.dwFileAttributes & FILE_ATTRIBUTE_SPARSE_FILE) != 0; }
 bool OpenDirEntry::IsHidden() const { return (m_findFileData.dwFileAttributes & FILE_ATTRIBUTE_HIDDEN) != 0; }
-bool OpenDirEntry::IsOffline() const {	return (m_findFileData.dwFileAttributes & FILE_ATTRIBUTE_OFFLINE) != 0; }
+bool OpenDirEntry::IsOffline() const { return (m_findFileData.dwFileAttributes & FILE_ATTRIBUTE_OFFLINE) != 0; }
 bool OpenDirEntry::IsReadOnly() const { return (m_findFileData.dwFileAttributes & FILE_ATTRIBUTE_READONLY) != 0; }
 bool OpenDirEntry::IsSystem() const { return (m_findFileData.dwFileAttributes & FILE_ATTRIBUTE_SYSTEM) != 0; }
 bool OpenDirEntry::IsTemporary() const { return (m_findFileData.dwFileAttributes & FILE_ATTRIBUTE_TEMPORARY) != 0; }
@@ -396,36 +401,156 @@ OpenDirEntry::~OpenDirEntry() {
 }
 
 #ifdef WIN32
-std::vector<std::wstring> GetVolumesListW()
+std::vector<std::wstring> GetWin32DriverListW()
 {
-	std::vector<std::wstring> wvolumes;
+	std::vector<std::wstring> wdrivers;
 	DWORD dwLen = ::GetLogicalDriveStrings(0, nullptr); /* the length of volumes str */
 	if (dwLen <= 0) {
-		return wvolumes;
+		return wdrivers;
 	}
 	wchar_t* pszDriver = new wchar_t[dwLen];
 	::GetLogicalDriveStringsW(dwLen, pszDriver);
 	wchar_t* pDriver = pszDriver;
 	while (*pDriver != '\0') {
-		std::wstring wVolume = std::wstring(pDriver);
-		wvolumes.push_back(wVolume);
-		pDriver += wVolume.length() + 1;
+		std::wstring wDriver = std::wstring(pDriver);
+		wdrivers.push_back(wDriver);
+		pDriver += wDriver.length() + 1;
 	}
 	delete[] pszDriver;
 	pszDriver = nullptr;
 	pDriver = nullptr;
-	return wvolumes;
+	return wdrivers;
 }
 
-std::vector<std::string> GetVolumesList()
+std::vector<std::string> GetWin32DriverList()
 {
-	std::vector<std::string> volumes;
-	std::vector<std::wstring> wvolumes = GetVolumesListW();
-	for (const std::wstring& wvolume : wvolumes) {
-		volumes.push_back(Utf16ToUtf8(wvolume));
+	std::vector<std::string> drivers;
+	std::vector<std::wstring> wdrivers = GetWin32DriverListW();
+	for (const std::wstring& wDriver : wdrivers) {
+		drivers.push_back(Utf16ToUtf8(wDriver));
 	}
-	return volumes;
+	return drivers;
 }
+
+/* member methods implementation for Win32VolumeDetail */
+Win32VolumesDetail::Win32VolumesDetail(const std::wstring& wVolumeName) : m_wVolumeName(wVolumeName) {}
+
+std::wstring Win32VolumesDetail::VolumeNameW() const { return m_wVolumeName; }
+
+std::string Win32VolumesDetail::VolumeName() const { return Utf16ToUtf8(m_wVolumeName); }
+
+std::optional<std::wstring> Win32VolumesDetail::GetVolumeDeviceNameW()
+{
+	if (m_wVolumeName.size() < 4 ||
+		m_wVolumeName[0] != L'\\' ||
+		m_wVolumeName[1] != L'\\' ||
+		m_wVolumeName[2] != L'?' ||
+		m_wVolumeName[3] != L'\\' ||
+		m_wVolumeName.back() != L'\\') { /* illegal volume name */
+		return std::nullopt;
+	}
+	std::wstring wVolumeParam = m_wVolumeName;
+	wVolumeParam.pop_back(); /* QueryDosDeviceW does not allow a trailing backslash */
+	wVolumeParam = wVolumeParam.substr(4);
+	WCHAR deviceNameBuf[DEVICE_BUFFER_MAX_LEN] = L"";
+	DWORD charCount = ::QueryDosDeviceW(wVolumeParam.c_str(), deviceNameBuf, ARRAYSIZE(deviceNameBuf));
+	if (charCount == 0) {
+		return std::nullopt;
+	}
+	return std::make_optional<std::wstring>(deviceNameBuf);
+}
+
+std::optional<std::string> Win32VolumesDetail::GetVolumeDeviceName()
+{
+	std::optional<std::wstring> wDeviceName = GetVolumeDeviceNameW();
+	if (!wDeviceName) {
+		return std::nullopt;
+	}
+	return std::make_optional<std::string>(Utf16ToUtf8(wDeviceName.value()));
+}
+
+std::optional<std::vector<std::wstring>> Win32VolumesDetail::GetVolumePathListW()
+{
+	/* https://learn.microsoft.com/en-us/windows/win32/fileio/displaying-volume-paths */
+	if (m_wVolumeName.size() < 4 ||
+		m_wVolumeName[0] != L'\\' ||
+		m_wVolumeName[1] != L'\\' ||
+		m_wVolumeName[2] != L'?' ||
+		m_wVolumeName[3] != L'\\' ||
+		m_wVolumeName.back() != L'\\') { /* illegal volume name */
+		return std::nullopt;
+	}
+	std::vector<std::wstring> wPathList;
+	PWCHAR devicePathNames = nullptr;
+	DWORD charCount = MAX_PATH + 1;
+	bool success = false;
+	while (true) {
+		devicePathNames = (PWCHAR) new BYTE[charCount * sizeof(WCHAR)];
+		if (!devicePathNames) { /* failed to malloc on heap */
+			return std::nullopt;
+		}
+		success = ::GetVolumePathNamesForVolumeNameW(
+			m_wVolumeName.c_str(),
+			devicePathNames,
+			charCount,
+			&charCount
+		);
+		if (success || ::GetLastError() != ERROR_MORE_DATA) {
+			break;
+		}
+		delete[] devicePathNames;
+		devicePathNames = nullptr;
+	}
+	if (success) {
+		for (PWCHAR nameIdx = devicePathNames;
+			nameIdx[0] != L'\0';
+			nameIdx += ::wcslen(nameIdx) + 1) {
+			wPathList.push_back(std::wstring(nameIdx));
+		}
+	}
+	if (devicePathNames != nullptr) {
+		delete[] devicePathNames;
+		devicePathNames = nullptr;
+	}
+	return std::make_optional<std::vector<std::wstring>>(wPathList);
+}
+
+std::optional<std::vector<std::string>> Win32VolumesDetail::GetVolumePathList()
+{
+	std::optional<std::vector<std::wstring>> wPathList = GetVolumePathListW();
+	if (!wPathList) {
+		return std::nullopt;
+	}
+	std::vector<std::string> pathList;
+	for (const std::wstring& wPath : wPathList.value()) {
+		pathList.push_back(Utf16ToUtf8(wPath));
+	}
+	return std::make_optional<std::vector<std::string>>(pathList);
+}
+
+std::optional<std::vector<Win32VolumesDetail>> GetWin32VolumeList()
+{
+	std::vector<std::wstring> wVolumes;
+	std::vector<Win32VolumesDetail> volumeDetails;
+	WCHAR wVolumeNameBuffer[VOLUME_BUFFER_MAX_LEN] = L"";
+	HANDLE handle = ::FindFirstVolumeW(wVolumeNameBuffer, VOLUME_BUFFER_MAX_LEN);
+	if (handle == INVALID_HANDLE_VALUE) {
+		::FindVolumeClose(handle);
+		return std::nullopt;
+	}
+	wVolumes.push_back(std::wstring(wVolumeNameBuffer));
+	while (::FindNextVolumeW(handle, wVolumeNameBuffer, VOLUME_BUFFER_MAX_LEN)) {
+		wVolumes.push_back(std::wstring(wVolumeNameBuffer));
+	}
+	::FindVolumeClose(handle);
+	handle = INVALID_HANDLE_VALUE;
+	for (const std::wstring& wVolumeName : wVolumes) {
+		Win32VolumesDetail volumeDetail(wVolumeName);
+		volumeDetails.push_back(volumeDetail);
+	}
+	return volumeDetails;
+}
+
 
 #endif
 

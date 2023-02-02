@@ -2,6 +2,7 @@
 #include <optional>
 #include <fstream>
 #include <chrono>
+#include <ctime>
 
 #ifdef WIN32
 #pragma execution_character_set("utf-8")
@@ -77,6 +78,7 @@ void PrintHelp()
 	std::cout << "fsutil -l <directory path> \t: list subdirectory/file of a directory" << std::endl;
 	std::cout << "fsutil -s <path> \t\t: print the detail info of directory/file" << std::endl;
 #ifdef WIN32
+	std::cout << "fsutil --drivers \t\t: list drivers" << std::endl;
 	std::cout << "fsutil --volumes \t\t: list volumes" << std::endl;
 #endif
 }
@@ -149,18 +151,37 @@ int DoListCommand(const std::string& path)
 	return 0;
 }
 
-void ListWin32Volumes()
-{
 #ifdef WIN32
-	std::vector<std::string> volumes = GetVolumesList();
-	for (const std::string& volume: volumes) {
-		std::cout << volume << std::endl;
+void ListWin32Drivers()
+{
+	std::vector<std::wstring> wDrivers = GetWin32DriverListW();
+	for (const std::wstring& wDriver : wDrivers) {
+		std::wcout << wDriver << std::endl;
 	}
-#endif
 	return;
 }
 
-#ifdef WIN32
+void ListWin32Volumes()
+{
+	std::optional<std::vector<Win32VolumesDetail>> wVolumes = GetWin32VolumeList();
+	if (!wVolumes) {
+		std::wcout << L"failed to list volumes, error: " << ::GetLastError() << std::endl;
+	}
+	for (Win32VolumesDetail& volumeDetail: wVolumes.value()) {
+		std::wcout << L"Name: \t\t" << volumeDetail.VolumeNameW() << std::endl;
+		if (volumeDetail.GetVolumeDeviceNameW()) {
+			std::wcout << L"Device: \t" << volumeDetail.GetVolumeDeviceNameW().value() << std::endl;
+		}
+		if (volumeDetail.GetVolumePathListW()) {
+			int index = 0;
+			for (const std::wstring& wPath : volumeDetail.GetVolumePathListW().value()) {
+				std::wcout << L"Device" << ++index << L": \t\t" << wPath << std::endl;
+			}
+		}
+		std::wcout << std::endl;
+	}
+	return;
+}
 
 int wmain(int argc, WCHAR** argv)
 {
@@ -177,6 +198,10 @@ int wmain(int argc, WCHAR** argv)
 		}
 		else if (std::wstring(argv[i]) == L"-s" && i + 1 < argc) {
 			return DoStatCommand(Utf16ToUtf8(std::wstring(argv[i + 1])));
+		}
+		else if (std::wstring(argv[i]) == L"--drivers") {
+			ListWin32Drivers();
+			return 0;
 		}
 		else if (std::wstring(argv[i]) == L"--volumes") {
 			ListWin32Volumes();
