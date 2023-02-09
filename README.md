@@ -17,8 +17,9 @@ cmake --build .
 
 ## Demo Usage
 ```
-fsutil -l <directory path>    ----  list subdirectory/file of a directory
-fsutil -s <path>              ----  print the detail info of directory/file
+fsutil -ls <directory path>   ----  list subdirectory/file of a directory
+fsutil -stat <path>           ----  print the detail info of directory/file
+fsutil -mkdir <path>          ----  create directory recursively
 fsutil --drivers              ----  list drivers
 fsutil --volumes              ----  list volumes
 ```
