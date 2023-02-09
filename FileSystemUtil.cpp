@@ -551,7 +551,67 @@ std::optional<std::vector<Win32VolumesDetail>> GetWin32VolumeList()
 	return volumeDetails;
 }
 
+#endif
+
+
+bool IsDirectory(const std::string& path)
+{
+	std::optional<StatResult> result = Stat(path);
+	if (!result) {
+		return false;
+	}
+	return result->IsDirectory();
+}
+
+bool IsEmptyDirectory(const std::string& path)
+{
+	std::optional<OpenDirEntry> entry = OpenDir(path);
+	if (!entry) {
+		return false;
+	}
+	do {
+		if (entry->Name() != "." || entry->Name() != "..") {
+			return false;
+		}
+	} while (entry->Next());
+	return true;
+}
+
+bool Exists(const std::string& path)
+{
+	std::optional<StatResult> result = Stat(path);
+	if (!result) {
+		return false;
+	}
+	return true;
+}
+
+bool Mkdir(const std::string& path)
+{
+#ifdef WIN32
+	std::wstring wPath = Utf8toUtf16(path);
+	return CreateDirectoryW(wPath.c_str(), nullptr);
+#endif
+#ifdef __linux__
 
 #endif
+}
+
+bool MkdirRecursive(const std::string& path)
+{
+	if (!Exists(ParentDirectoryPath(path))) {
+		bool success = MkdirRecursive(ParentDirectoryPath(path));
+		if (!success) {
+			return false;
+		}
+	}
+	return Mkdir(path);
+}
+
+
+std::string ParentDirectoryPath(const std::string& path)
+{
+
+}
 
 }

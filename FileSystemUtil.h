@@ -134,7 +134,6 @@ private:
 
 std::optional<StatResult> Stat(const std::string& path);
 
-
 class OpenDirEntry
 {
 public:
@@ -202,7 +201,6 @@ private:
 
 std::optional<OpenDirEntry> OpenDir(const std::string& path);
 
-
 #ifdef WIN32
 std::vector<std::wstring> GetWin32DriverListW();
 std::vector<std::string> GetWin32DriverList();
@@ -223,6 +221,13 @@ private:
 std::optional<std::vector<Win32VolumesDetail>> GetWin32VolumeList();
 #endif
 
+/* Common cross-platform API */
+bool IsDirectory(const std::string& path);
+bool IsEmptyDirectory(const std::string& path);
+bool Exists(const std::string& path);
+bool Mkdir(const std::string& path);
+bool MkdirRecursive(const std::string& path);
+std::string ParentDirectoryPath(const std::string& path);
 }
 
 #endif
