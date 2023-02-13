@@ -4,6 +4,7 @@
 #define _SILENCE_CXX17_CODECVT_HEADER_DEPRECATION_WARNING 1
 #include <locale>
 #include <codecvt>
+#include <sddl.h>
 #endif
 
 #include <algorithm>
@@ -561,11 +562,12 @@ std::optional<std::vector<Win32VolumesDetail>> GetWin32VolumeList()
 * https://learn.microsoft.com/en-us/windows/win32/api/aclapi/nf-aclapi-getnamedsecurityinfoa
 * https://blog.csdn.net/eggfly178/article/details/41773601
 */
-std::optional<std::wstring> GetSecurityDescriptorW(const std::wstring& wPath)
+std::optional<std::wstring> GetDACLW(const std::wstring& wPath)
 {
     PACL dAcl = nullptr;
     PSECURITY_DESCRIPTOR psd = nullptr;
     DWORD result = 0;
+    LPWSTR wSddlStr = nullptr;
     try
     {
         result = ::GetNamedSecurityInfoW(
@@ -578,18 +580,83 @@ std::optional<std::wstring> GetSecurityDescriptorW(const std::wstring& wPath)
             NULL,
             &psd);
     } catch (const std::exception& e) {
+        std::cout << 1 << std::endl;
         return std::nullopt;
     }
     if (result != ERROR_SUCCESS) {
+        std::cout << 2 << std::endl;
         return std::nullopt;
     }
+    bool ret = ::ConvertSecurityDescriptorToStringSecurityDescriptorW(
+        psd,
+        SDDL_REVISION_1,
+        DACL_SECURITY_INFORMATION,
+        &wSddlStr,
+        nullptr);
     ::LocalFree(psd);
-    return std::make_optional<std::wstring>(L"");
+    psd = nullptr;
+    if (!ret) {
+        std::cout << 3 << std::endl;
+        return std::nullopt;
+    }
+    std::wstring res(wSddlStr);
+    return std::make_optional<std::wstring>(res);
 }
 
-std::optional<std::string> GetSecurityDescriptor(const std::string& path)
+std::optional<std::string> GetDACL(const std::string& path)
 {
-    std::optional<std::wstring> result = GetSecurityDescriptorW(Utf8ToUtf16(path));
+    std::optional<std::wstring> result = GetDACLW(Utf8ToUtf16(path));
+    if (!result) {
+        return std::nullopt;
+    }
+    return std::make_optional<std::string>(Utf16ToUtf8(result.value()));
+}
+
+std::optional<std::wstring> GetSACLW(const std::wstring& wPath)
+{
+    PACL dAcl = nullptr;
+    PSECURITY_DESCRIPTOR psd = nullptr;
+    DWORD result = 0;
+    LPWSTR wSddlStr = nullptr;
+    try
+    {
+        result = ::GetNamedSecurityInfoW(
+            wPath.c_str(),
+            SE_FILE_OBJECT,
+            SACL_SECURITY_INFORMATION,
+            NULL,
+            NULL,
+            &dAcl,
+            NULL,
+            &psd);
+    }
+    catch (const std::exception& e) {
+        std::cout << 1 << std::endl;
+        return std::nullopt;
+    }
+    if (result != ERROR_SUCCESS) {
+        std::cout << 2 << std::endl;
+        return std::nullopt;
+    }
+    bool ret = ::ConvertSecurityDescriptorToStringSecurityDescriptorW(
+        psd,
+        SDDL_REVISION_1,
+        SACL_SECURITY_INFORMATION,
+        &wSddlStr,
+        nullptr);
+    ::LocalFree(psd);
+    psd = nullptr;
+    if (!ret) {
+        std::cout << 3 << std::endl;
+        return std::nullopt;
+    }
+    std::wstring res(wSddlStr);
+    return std::make_optional<std::wstring>(res);
+}
+
+std::optional<std::string> GetSACL(const std::string& path)
+{
+    std::optional<std::wstring> result = GetSACLW(Utf8ToUtf16(path));
     if (!result) {
         return std::nullopt;
     }

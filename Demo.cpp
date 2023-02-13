@@ -166,9 +166,14 @@ int DoMkdirCommand(const std::string& path)
 
 int DoGetSecurityDescriptorWCommand(const std::wstring& wPath)
 {
-    std::optional<std::wstring> sd = GetSecurityDescriptorW(wPath);
-    if (sd) {
-        std::wcout << sd.value() << std::endl;
+    std::optional<std::wstring> wDacl = GetDACLW(wPath);
+    if (wDacl) {
+        std::wcout << "DACL: " << wDacl.value() << std::endl;
+        return 0;
+    }
+    std::optional<std::wstring> wSacl = GetSACLW(wPath);
+    if (wSacl) {
+        std::wcout << L"SACL: " << wSacl.value() << std::endl;
         return 0;
     }
     std::wcout << L"Query Failed!" << std::endl;
