@@ -15,6 +15,7 @@
  * uncomment this macro if you need to get native windows microsecond timestamp
  */
 #include <Windows.h>
+#include <Aclapi.h>
 #endif
 
 #ifdef __linux__
@@ -202,6 +203,7 @@ private:
 std::optional<OpenDirEntry> OpenDir(const std::string& path);
 
 #ifdef WIN32
+/* Win32 Volumes related API */
 std::vector<std::wstring> GetWin32DriverListW();
 std::vector<std::string> GetWin32DriverList();
 
@@ -219,6 +221,10 @@ private:
 };
 
 std::optional<std::vector<Win32VolumesDetail>> GetWin32VolumeList();
+
+/* Win32 Security Descriptor related API */
+std::optional<std::wstring> GetSecurityDescriptorW(const std::wstring& wPath);
+std::optional<std::string> GetSecurityDescriptor(const std::string& path);
 #endif
 
 /* Common cross-platform API */
