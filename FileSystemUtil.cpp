@@ -400,6 +400,7 @@ OpenDirEntry::~OpenDirEntry() {
 }
 
 #ifdef WIN32
+/* Win32 Volumes related API */
 std::vector<std::wstring> GetWin32DriverListW()
 {
     std::vector<std::wstring> wdrivers;
@@ -548,6 +549,51 @@ std::optional<std::vector<Win32VolumesDetail>> GetWin32VolumeList()
         volumeDetails.push_back(volumeDetail);
     }
     return volumeDetails;
+}
+
+/* Win32 Security Descriptor related API */
+
+/**
+* https://learn.microsoft.com/en-us/windows/win32/api/aclapi/nf-aclapi-getnamedsecurityinfoa?redirectedfrom=MSDN
+* https://learn.microsoft.com/en-us/previous-versions/windows/hardware/device-stage/drivers/ff556610(v=vs.85)
+* https://learn.microsoft.com/en-us/windows/win32/secauthz/security-information
+* https://learn.microsoft.com/en-us/windows/win32/api/accctrl/ne-accctrl-se_object_type
+* https://learn.microsoft.com/en-us/windows/win32/api/aclapi/nf-aclapi-getnamedsecurityinfoa
+* https://blog.csdn.net/eggfly178/article/details/41773601
+*/
+std::optional<std::wstring> GetSecurityDescriptorW(const std::wstring& wPath)
+{
+    PACL dAcl = nullptr;
+    PSECURITY_DESCRIPTOR psd = nullptr;
+    DWORD result = 0;
+    try
+    {
+        result = ::GetNamedSecurityInfoW(
+            wPath.c_str(),
+            SE_FILE_OBJECT,
+            DACL_SECURITY_INFORMATION,
+            NULL,
+            NULL,
+            &dAcl,
+            NULL,
+            &psd);
+    } catch (const std::exception& e) {
+        return std::nullopt;
+    }
+    if (result != ERROR_SUCCESS) {
+        return std::nullopt;
+    }
+    ::LocalFree(psd);
+    return std::make_optional<std::wstring>(L"");
+}
+
+std::optional<std::string> GetSecurityDescriptor(const std::string& path)
+{
+    std::optional<std::wstring> result = GetSecurityDescriptorW(Utf8ToUtf16(path));
+    if (!result) {
+        return std::nullopt;
+    }
+    return std::make_optional<std::string>(Utf16ToUtf8(result.value()));
 }
 
 #endif

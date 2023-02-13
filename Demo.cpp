@@ -79,6 +79,7 @@ void PrintHelp()
     std::cout << "fsutil -stat <path> \t\t: print the detail info of directory/file" << std::endl;
     std::cout << "fsutil -mkdir <path> \t\t: create directory recursively" << std::endl;
 #ifdef WIN32
+    std::cout << "fsutil -getsd <path> \t: get file/directory security descriptor ACE" << std::endl;
     std::cout << "fsutil --drivers \t\t: list drivers" << std::endl;
     std::cout << "fsutil --volumes \t\t: list volumes" << std::endl;
 #endif
@@ -152,7 +153,8 @@ int DoListCommand(const std::string& path)
     return 0;
 }
 
-int DoMkdirCommand(const std::string& path) {
+int DoMkdirCommand(const std::string& path)
+{
     if (MkdirRecursive(path)) {
         std::cout << "Success" << std::endl;
         return 0;
@@ -160,6 +162,17 @@ int DoMkdirCommand(const std::string& path) {
         std::cout << "Failed" << std::endl;
         return -1;
     }
+}
+
+int DoGetSecurityDescriptorWCommand(const std::wstring& wPath)
+{
+    std::optional<std::wstring> sd = GetSecurityDescriptorW(wPath);
+    if (sd) {
+        std::wcout << sd.value() << std::endl;
+        return 0;
+    }
+    std::wcout << L"Query Failed!" << std::endl;
+    return -1;
 }
 
 #ifdef WIN32
@@ -211,6 +224,8 @@ int wmain(int argc, WCHAR** argv)
             return DoStatCommand(Utf16ToUtf8(std::wstring(argv[i + 1])));
         } else if (std::wstring(argv[i]) == L"-mkdir" && i + 1 < argc) {
             return DoMkdirCommand(Utf16ToUtf8(std::wstring(argv[i + 1])));
+        } else if (std::wstring(argv[i]) == L"-getsd" && i + 1 < argc) {
+            return DoGetSecurityDescriptorWCommand(std::wstring(argv[i + 1]));
         } else if (std::wstring(argv[i]) == L"--drivers") {
             ListWin32Drivers();
             return 0;
