@@ -580,11 +580,9 @@ std::optional<std::wstring> GetDACLW(const std::wstring& wPath)
             NULL,
             &psd);
     } catch (const std::exception& e) {
-        std::cout << 1 << std::endl;
         return std::nullopt;
     }
     if (result != ERROR_SUCCESS) {
-        std::cout << 2 << std::endl;
         return std::nullopt;
     }
     bool ret = ::ConvertSecurityDescriptorToStringSecurityDescriptorW(
@@ -596,7 +594,6 @@ std::optional<std::wstring> GetDACLW(const std::wstring& wPath)
     ::LocalFree(psd);
     psd = nullptr;
     if (!ret) {
-        std::cout << 3 << std::endl;
         return std::nullopt;
     }
     std::wstring res(wSddlStr);
@@ -631,11 +628,9 @@ std::optional<std::wstring> GetSACLW(const std::wstring& wPath)
             &psd);
     }
     catch (const std::exception& e) {
-        std::cout << 1 << std::endl;
         return std::nullopt;
     }
     if (result != ERROR_SUCCESS) {
-        std::cout << 2 << std::endl;
         return std::nullopt;
     }
     bool ret = ::ConvertSecurityDescriptorToStringSecurityDescriptorW(
@@ -647,7 +642,6 @@ std::optional<std::wstring> GetSACLW(const std::wstring& wPath)
     ::LocalFree(psd);
     psd = nullptr;
     if (!ret) {
-        std::cout << 3 << std::endl;
         return std::nullopt;
     }
     std::wstring res(wSddlStr);
