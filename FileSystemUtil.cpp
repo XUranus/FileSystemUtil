@@ -561,6 +561,7 @@ std::optional<std::vector<Win32VolumesDetail>> GetWin32VolumeList()
 * https://learn.microsoft.com/en-us/windows/win32/api/accctrl/ne-accctrl-se_object_type
 * https://learn.microsoft.com/en-us/windows/win32/api/aclapi/nf-aclapi-getnamedsecurityinfoa
 * https://blog.csdn.net/eggfly178/article/details/41773601
+* https://learn.microsoft.com/en-us/windows/win32/secauthz/security-descriptor-string-format
 */
 std::optional<std::wstring> GetDACLW(const std::wstring& wPath)
 {
@@ -597,6 +598,7 @@ std::optional<std::wstring> GetDACLW(const std::wstring& wPath)
         return std::nullopt;
     }
     std::wstring res(wSddlStr);
+    ::LocalFree(wSddlStr);
     return std::make_optional<std::wstring>(res);
 }
 
@@ -656,7 +658,6 @@ std::optional<std::string> GetSACL(const std::string& path)
     }
     return std::make_optional<std::string>(Utf16ToUtf8(result.value()));
 }
-
 #endif
 
 
