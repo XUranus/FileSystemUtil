@@ -5,6 +5,14 @@
 #include <locale>
 #include <codecvt>
 #include <sddl.h>
+#include <winioctl.h>
+#endif
+
+#ifdef __linux__
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
 #endif
 
 #include <algorithm>
@@ -399,6 +407,109 @@ std::optional<OpenDirEntry> OpenDir(const std::string& path)
 OpenDirEntry::~OpenDirEntry() {
     Close();
 }
+
+
+SparseRangeResult QuerySparseAllocateRanges(const std::string& path)
+{
+    std::optional<StatResult> statResult = Stat(path);
+    /* check if is a file */
+    if (!statResult || statResult->IsDirectory()) {
+        return std::nullopt;
+    }
+#ifdef WIN32
+    if (!statResult->IsSparseFile()) {
+        return std::nullopt;
+    }
+    return QuerySparseWin32AllocateRangesW(Utf8ToUtf16(path));
+#else
+    return QuerySparsePosixAllocateRanges(path);
+#endif
+}
+
+#ifdef WIN32
+/*
+ * Invoke Stat() and check if it's sparse file
+ * Represent the range using [<offset, length>] in bytes
+ * Exmple from:
+ * https://github.com/microsoft/cpprestsdk/blob/master/Release/tests/functional/streams/CppSparseFile.cpp
+ */
+SparseRangeResult QuerySparseWin32AllocateRangesW(const std::wstring& wPath)
+{
+    std::vector<std::pair<uint64_t, uint64_t>> ranges;
+    /* Open the file for read */
+    HANDLE hFile = ::CreateFileW(
+        wPath.c_str(), GENERIC_READ, 0, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (hFile == INVALID_HANDLE_VALUE) {
+        return std::nullopt;
+    }
+    LARGE_INTEGER liFileSize;
+    GetFileSizeEx(hFile, &liFileSize);
+    /* Range to be examined (the whole file) */
+    FILE_ALLOCATED_RANGE_BUFFER queryRange;
+    queryRange.FileOffset.QuadPart = 0;
+    queryRange.Length = liFileSize;
+    /* Allocated areas info */
+    FILE_ALLOCATED_RANGE_BUFFER allocRanges[1024];
+    DWORD nbytes;
+    bool fFinished;
+    do
+    {
+        fFinished = DeviceIoControl(
+                        hFile, FSCTL_QUERY_ALLOCATED_RANGES, &queryRange, sizeof(queryRange),
+                        allocRanges, sizeof(allocRanges), &nbytes, nullptr);
+        if (!fFinished) {
+            DWORD dwError = GetLastError();
+            /* ERROR_MORE_DATA is the only error that is normal */
+            if (dwError != ERROR_MORE_DATA) {
+                ::CloseHandle(hFile);
+                return std::nullopt;
+            }
+        }
+        /* Calculate the number of records returned */
+        DWORD dwAllocRangeCount = nbytes / sizeof(FILE_ALLOCATED_RANGE_BUFFER);
+        /* Print each allocated range */
+        for (int i = 0; i < dwAllocRangeCount; i++) {
+            ranges.emplace_back(allocRanges[i].FileOffset.QuadPart, allocRanges[i].Length.QuadPart);
+        }
+        // Set starting address and size for the next query
+        if (!fFinished && dwAllocRangeCount > 0)
+        {
+            queryRange.FileOffset.QuadPart = 
+                allocRanges[dwAllocRangeCount - 1].FileOffset.QuadPart +
+                allocRanges[dwAllocRangeCount - 1].Length.QuadPart;
+            queryRange.Length.QuadPart = liFileSize.QuadPart - queryRange.FileOffset.QuadPart;
+        }
+    } while (!fFinished);
+    ::CloseHandle(hFile);
+    return std::make_optional(ranges);
+}
+#endif
+
+#ifdef __linux__
+SparseRangeResult QuerySparsePosixAllocateRanges(const std::string& path)
+{
+    std::vector<std::pair<uint64_t, uint64_t>> ranges;
+    int fd = ::open(path.c_str() , O_RDONLY | O_NONBLOCK);
+    if (fd < 0) {
+        return std::nullopt;
+    }
+    off_t end = ::lseek(fd, 0, SEEK_END);
+    off_t hole = ::lseek(fd, 0, SEEK_HOLE);
+    off_t cur = 0, offset = 0 , len = 0;
+    while (cur < end) {
+        cur = ::lseek(fd, cur, SEEK_DATA);
+        if (cur == -1 && errno == ENXIO) {
+            cur = end;
+            continue;
+        }
+        offset = cur;
+        cur = ::lseek(fd, cur, SEEK_HOLE);
+        len = cur - offset;
+        ranges.emplace_back(offset, len);
+    }
+    return std::make_optional(ranges);
+}
+#endif
 
 #ifdef WIN32
 /* Win32 Volumes related API */

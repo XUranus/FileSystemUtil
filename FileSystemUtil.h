@@ -25,6 +25,8 @@
 #include <cstring>
 #endif
 
+using SparseRangeResult = std::optional<std::vector<std::pair<uint64_t, uint64_t>>>;
+
 #ifdef WIN32
 inline uint64_t CombineDWORD(DWORD low, DWORD high) {
     return (uint64_t)low + ((uint64_t)MAXDWORD + 1) * high;
@@ -201,6 +203,15 @@ private:
 };
 
 std::optional<OpenDirEntry> OpenDir(const std::string& path);
+
+/* Sparse File allocate range API */
+SparseRangeResult QuerySparseAllocateRanges(const std::string& path);
+#ifdef WIN32
+SparseRangeResult QuerySparseWin32AllocateRangesW(const std::wstring& wPath);
+#endif
+#ifdef __linux__
+SparseRangeResult QuerySparsePosixAllocateRanges(const std::string& path);
+#endif
 
 #ifdef WIN32
 /* Win32 Volumes related API */

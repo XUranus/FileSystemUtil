@@ -164,6 +164,31 @@ int DoMkdirCommand(const std::string& path)
     }
 }
 
+int DoQuerySparseCommand(const std::string& path)
+{
+    std::optional<StatResult> statResult = Stat(path);
+    if (!statResult) {
+        std::cout << "File Not Exist" << std::endl;
+        return -1;
+    }
+    SparseRangeResult result = QuerySparseAllocateRanges(path);
+    if (!result) {
+        std::cout << "file is not a sparse file" << std::endl;
+        return -1;
+    }
+    std::cout << "Logical Size: " << statResult->Size() << std::endl;
+    std::cout << "Sparse Allocate Range:" << std::endl;
+    uint64_t physicAllocTotal = 0;
+    for (const std::pair<uint64_t, uint64_t>& range: result.value()) {
+        physicAllocTotal += (range.second - range.first);
+        std::cout << "offset = " << range.first << " , length = " << range.second << std::endl;
+    }
+    std::cout << "Physic Allocate Size: " << physicAllocTotal << std::endl;
+    std::cout << "Hole Size: " << statResult->Size() - physicAllocTotal << std::endl;
+    return 0;
+}
+
+#ifdef WIN32
 int DoGetSecurityDescriptorWCommand(const std::wstring& wPath)
 {
     std::optional<std::wstring> wDacl = GetDACLW(wPath);
@@ -180,7 +205,6 @@ int DoGetSecurityDescriptorWCommand(const std::wstring& wPath)
     return -1;
 }
 
-#ifdef WIN32
 void ListWin32Drivers()
 {
     std::vector<std::wstring> wDrivers = GetWin32DriverListW();
@@ -229,6 +253,8 @@ int wmain(int argc, WCHAR** argv)
             return DoStatCommand(Utf16ToUtf8(std::wstring(argv[i + 1])));
         } else if (std::wstring(argv[i]) == L"-mkdir" && i + 1 < argc) {
             return DoMkdirCommand(Utf16ToUtf8(std::wstring(argv[i + 1])));
+        } else if (std::wstring(argv[i]) == L"-sparse" && i + 1 < argc) {
+            return DoQuerySparseCommand(Utf16ToUtf8(std::wstring(argv[i + 1])));
         } else if (std::wstring(argv[i]) == L"-getsd" && i + 1 < argc) {
             return DoGetSecurityDescriptorWCommand(std::wstring(argv[i + 1]));
         } else if (std::wstring(argv[i]) == L"--drivers") {
@@ -263,6 +289,8 @@ int main(int argc, char** argv)
             return DoStatCommand(std::string(argv[i + 1]));
         } else if (std::string(argv[i]) == "-mkdir" && i + 1 < argc) {
             return DoMkdirCommand(std::string(argv[i + 1]));
+        } else if (std::string(argv[i]) == "-sparse" && i + 1 < argc) {
+            return DoQuerySparseCommand(std::string(argv[i + 1]));
         } else {
             return DoStatCommand(std::string(argv[i]));
         }
