@@ -488,6 +488,7 @@ SparseRangeResult QuerySparseWin32AllocateRangesW(const std::wstring& wPath)
 #ifdef __linux__
 SparseRangeResult QuerySparsePosixAllocateRanges(const std::string& path)
 {
+#ifdef SEEK_HOLE
     std::vector<std::pair<uint64_t, uint64_t>> ranges;
     int fd = ::open(path.c_str() , O_RDONLY | O_NONBLOCK);
     if (fd < 0) {
@@ -502,12 +503,22 @@ SparseRangeResult QuerySparsePosixAllocateRanges(const std::string& path)
             cur = end;
             continue;
         }
+        if (cur < 0) {
+            return std::nullopt; /* query failed */
+        }
         offset = cur;
         cur = ::lseek(fd, cur, SEEK_HOLE);
+        if (cur < 0) {
+            return std::nullopt; /* query failed */
+        }
         len = cur - offset;
         ranges.emplace_back(offset, len);
     }
     return std::make_optional(ranges);
+#else
+    /* kernel not support sparse file */
+    return std::nullopt;
+#endif
 }
 #endif
 
@@ -674,6 +685,54 @@ std::optional<std::vector<Win32VolumesDetail>> GetWin32VolumeList()
 * https://blog.csdn.net/eggfly178/article/details/41773601
 * https://learn.microsoft.com/en-us/windows/win32/secauthz/security-descriptor-string-format
 */
+std::optional<std::wstring> GetSecurityDescriptorW(const std::wstring& wPath)
+{
+    PACL dAcl = nullptr;
+    PSECURITY_DESCRIPTOR psd = nullptr;
+    DWORD result = 0;
+    LPWSTR wSddlStr = nullptr;
+    try
+    {
+        result = ::GetNamedSecurityInfoW(
+            wPath.c_str(),
+            SE_FILE_OBJECT,
+            DACL_SECURITY_INFORMATION,
+            NULL,
+            NULL,
+            &dAcl,
+            NULL,
+            &psd);
+    } catch (const std::exception& e) {
+        return std::nullopt;
+    }
+    if (result != ERROR_SUCCESS) {
+        return std::nullopt;
+    }
+    bool ret = ::ConvertSecurityDescriptorToStringSecurityDescriptorW(
+        psd,
+        SDDL_REVISION_1,
+        DACL_SECURITY_INFORMATION | SACL_SECURITY_INFORMATION | OWNER_SECURITY_INFORMATION | GROUP_SECURITY_INFORMATION,
+        &wSddlStr,
+        nullptr);
+    ::LocalFree(psd);
+    psd = nullptr;
+    if (!ret) {
+        return std::nullopt;
+    }
+    std::wstring res(wSddlStr);
+    ::LocalFree(wSddlStr);
+    return std::make_optional<std::wstring>(res);
+}
+
+std::optional<std::string> GetSecurityDescriptor(const std::string& path)
+{
+    std::optional<std::wstring> result = GetSecurityDescriptorW(Utf8ToUtf16(path));
+    if (!result) {
+        return std::nullopt;
+    }
+    return std::make_optional<std::string>(Utf16ToUtf8(result.value()));
+}
+
 std::optional<std::wstring> GetDACLW(const std::wstring& wPath)
 {
     PACL dAcl = nullptr;

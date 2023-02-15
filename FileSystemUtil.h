@@ -234,6 +234,8 @@ private:
 std::optional<std::vector<Win32VolumesDetail>> GetWin32VolumeList();
 
 /* Win32 Security Descriptor related API */
+std::optional<std::wstring> GetSecurityDescriptorW(const std::wstring& wPath);
+std::optional<std::string> GetSecurityDescriptor(const std::string& path);
 std::optional<std::wstring> GetDACLW(const std::wstring& wPath);
 std::optional<std::string> GetDACL(const std::string& path);
 std::optional<std::wstring> GetSACLW(const std::wstring& wPath);
