@@ -45,6 +45,7 @@ std::string Win32FileAttributeFlagsToString(const StatResult& statResult)
     if (statResult.IsSystem()) { ret += "SYSTEM | "; }
     if (statResult.IsTemporary()) { ret += "TEMP | "; }
     if (statResult.IsNormal()) { ret += "NORMAL | "; }
+    if (statResult.IsReparsePoint()) { ret += "REPARSE | "; }
     if (!ret.empty() && ret.back() == ' ') {
         ret.pop_back();
         ret.pop_back();
@@ -80,7 +81,7 @@ void PrintHelp()
     std::cout << "fsutil -mkdir <path> \t\t: create directory recursively" << std::endl;
     std::cout << "fsutil -sparse <path> \t\t: query sparse file allocate ranges" << std::endl;
 #ifdef WIN32
-    std::cout << "fsutil -getsd <path> \t: get file/directory security descriptor ACE" << std::endl;
+    std::cout << "fsutil -getsd <path> \t\t: get file/directory security descriptor ACE" << std::endl;
     std::cout << "fsutil --drivers \t\t: list drivers" << std::endl;
     std::cout << "fsutil --volumes \t\t: list volumes" << std::endl;
 #endif
@@ -110,6 +111,13 @@ int DoStatCommand(const std::string& path)
 #ifdef WIN32
     std::cout << "Attr: \t\t" << statResult->Attribute() << std::endl;
     std::cout << "Flags: \t\t" << Win32FileAttributeFlagsToString(statResult.value()) << std::endl;
+    if (statResult->IsReparsePoint()) {
+        std::cout << "Reparse: \t";
+        if (statResult->HasReparseMountPointTag()) { std::cout << "MountPoint" << std::endl; }
+        if (statResult->HasReparseNfsTag()) { std::cout << "NFS" << std::endl; }
+        if (statResult->HasReparseOneDriveTag()) { std::cout << "Onedrive" << std::endl; }
+        if (statResult->HasReparseSymlinkTag()) { std::cout << "Symlink" << std::endl; }
+    }
 #endif
 #ifdef __linux__
     std::cout << "Mode: \t\t" << statResult->Mode() << std::endl;
@@ -140,6 +148,7 @@ int DoListCommand(const std::string& path)
             if (subStatResult) {
                 std::cout
                     << "UniqueID: " << subStatResult->UniqueID() << "\t"
+                    << "Attribute: " << subStatResult->Attribute() << "\t"
                     << "Type: " << (subStatResult->IsDirectory() ? "Directory" : "File") << "\t"
                     << "Path: " << openDirEntry->FullPath()
                     << std::endl;

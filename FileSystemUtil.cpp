@@ -26,6 +26,7 @@ constexpr auto WIN32_GID = 0;
 constexpr auto VOLUME_BUFFER_MAX_LEN = MAX_PATH;
 constexpr auto VOLUME_PATH_MAX_LEN = MAX_PATH + 1;
 constexpr auto DEVICE_BUFFER_MAX_LEN = MAX_PATH;
+constexpr auto DEFAULT_REPARSE_TAG = 0;
 #endif
 }
 
@@ -58,7 +59,8 @@ StatResult::StatResult(const struct stat& statbuff)
 #endif
 
 #ifdef WIN32
-StatResult::StatResult(const BY_HANDLE_FILE_INFORMATION& handleFileInformation)
+StatResult::StatResult(const std::wstring& wPath, const BY_HANDLE_FILE_INFORMATION& handleFileInformation)
+    : m_wPath(wPath)
 {
     memcpy_s(&m_handleFileInformation, sizeof(BY_HANDLE_FILE_INFORMATION),
         &handleFileInformation, sizeof(BY_HANDLE_FILE_INFORMATION));
@@ -181,7 +183,28 @@ bool StatResult::IsReadOnly() const { return (m_handleFileInformation.dwFileAttr
 bool StatResult::IsSystem() const { return (m_handleFileInformation.dwFileAttributes & FILE_ATTRIBUTE_SYSTEM) != 0; }
 bool StatResult::IsTemporary() const { return (m_handleFileInformation.dwFileAttributes & FILE_ATTRIBUTE_TEMPORARY) != 0; }
 bool StatResult::IsNormal() const { return (m_handleFileInformation.dwFileAttributes & FILE_ATTRIBUTE_NORMAL) != 0; }
+bool StatResult::IsReparsePoint() const { return (m_handleFileInformation.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0; }
 uint64_t StatResult::Attribute() const { return m_handleFileInformation.dwFileAttributes; }
+
+DWORD StatResult::ReparseTag() const {
+    if (!IsReparsePoint()) {
+        return DEFAULT_REPARSE_TAG;
+    }
+    WIN32_FIND_DATAW findFileData{};
+    HANDLE fileHandle = ::FindFirstFileW(m_wPath.c_str(), &findFileData);
+    if (fileHandle == INVALID_HANDLE_VALUE || fileHandle == nullptr) {
+        return DEFAULT_REPARSE_TAG;
+    }
+    ::FindClose(fileHandle);
+    fileHandle = nullptr;
+    return findFileData.dwReserved0;
+}
+
+// https://learn.microsoft.com/en-us/windows/win32/fileio/reparse-point-tags
+bool StatResult::HasReparseSymlinkTag() const { return ReparseTag() == IO_REPARSE_TAG_SYMLINK; }
+bool StatResult::HasReparseMountPointTag() const { return ReparseTag() == IO_REPARSE_TAG_MOUNT_POINT; }
+bool StatResult::HasReparseNfsTag() const { return ReparseTag() == IO_REPARSE_TAG_NFS; }
+bool StatResult::HasReparseOneDriveTag() const { return ReparseTag() == IO_REPARSE_TAG_ONEDRIVE; }
 #endif
 
 #ifdef __linux__
@@ -204,9 +227,15 @@ std::optional<StatResult> Stat(const std::string& path)
     return std::make_optional<StatResult>(statbuff);
 #endif
 #ifdef WIN32
+    return StatW(Utf8ToUtf16(path));
+#endif
+}
+
+#ifdef WIN32
+std::optional<StatResult> StatW(const std::wstring& wPath)
+{
     BY_HANDLE_FILE_INFORMATION handleFileInformation{};
-    std::wstring wpath = Utf8ToUtf16(path);
-    HANDLE hFile = ::CreateFileW(wpath.c_str(), GENERIC_READ,
+    HANDLE hFile = ::CreateFileW(wPath.c_str(), GENERIC_READ,
         FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, 0);
     if (hFile == nullptr || hFile == INVALID_HANDLE_VALUE) {
         return std::nullopt;
@@ -216,10 +245,13 @@ std::optional<StatResult> Stat(const std::string& path)
         return std::nullopt;
     }
     ::CloseHandle(hFile);
-    return std::make_optional<StatResult>(handleFileInformation);
-#endif
+    DWORD attribute = GetFileAttributesW(wPath.c_str()); /* to detect REPARSE_POINT flag */
+    if (attribute != INVALID_FILE_ATTRIBUTES) {
+        handleFileInformation.dwFileAttributes = attribute;
+    }
+    return std::make_optional<StatResult>(wPath, handleFileInformation);
 }
-
+#endif
 
 #ifdef WIN32
 OpenDirEntry::OpenDirEntry(const std::string& dirPath, const WIN32_FIND_DATAW& findFileData, const HANDLE& fileHandle)
@@ -235,6 +267,7 @@ bool OpenDirEntry::IsReadOnly() const { return (m_findFileData.dwFileAttributes 
 bool OpenDirEntry::IsSystem() const { return (m_findFileData.dwFileAttributes & FILE_ATTRIBUTE_SYSTEM) != 0; }
 bool OpenDirEntry::IsTemporary() const { return (m_findFileData.dwFileAttributes & FILE_ATTRIBUTE_TEMPORARY) != 0; }
 bool OpenDirEntry::IsNormal() const { return (m_findFileData.dwFileAttributes & FILE_ATTRIBUTE_NORMAL) != 0; }
+bool OpenDirEntry::IsReparsePoint() const { return (m_findFileData.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0; }
 uint64_t OpenDirEntry::Attribute() const { return m_findFileData.dwFileAttributes; }
 
 uint64_t OpenDirEntry::AccessTime() const

@@ -73,7 +73,7 @@ public:
 #endif
 
 #ifdef WIN32
-    StatResult(const BY_HANDLE_FILE_INFORMATION& handleFileInformation);
+    StatResult(const std::wstring& wPath, const BY_HANDLE_FILE_INFORMATION& handleFileInformation);
 #endif
     /**
     * user id and group id of the owner, always set to zero on windows
@@ -112,7 +112,15 @@ public:
     bool IsSystem() const;
     bool IsTemporary() const;
     bool IsNormal() const;
+    bool IsReparsePoint() const;
     uint64_t Attribute() const;
+    
+    /* reparse point related methods */
+    DWORD ReparseTag() const;
+    bool HasReparseSymlinkTag() const;
+    bool HasReparseMountPointTag() const;
+    bool HasReparseNfsTag() const;
+    bool HasReparseOneDriveTag() const;
 #endif
 
 #ifdef __linux__
@@ -132,10 +140,14 @@ private:
 #endif
 #ifdef WIN32
     BY_HANDLE_FILE_INFORMATION m_handleFileInformation{};
+    std::wstring m_wPath;
 #endif
 };
 
 std::optional<StatResult> Stat(const std::string& path);
+#ifdef WIN32
+std::optional<StatResult> StatW(const std::wstring& wPath);
+#endif
 
 class OpenDirEntry
 {
@@ -153,6 +165,7 @@ public:
     bool IsSystem() const;
     bool IsTemporary() const;
     bool IsNormal() const;
+    bool IsReparsePoint() const;
     uint64_t AccessTime() const;
     uint64_t CreationTime() const;
     uint64_t ModifyTime() const;
