@@ -52,7 +52,8 @@ std::string Utf16ToUtf8(const std::wstring& wstr)
 
 
 #ifdef __linux__
-StatResult::StatResult(const struct stat& statbuff)
+StatResult::StatResult(const std::string& path, const struct stat& statbuff)
+    : m_path(path)
 {
     memcpy(&m_stat, &statbuff, sizeof(struct stat));
 }
@@ -172,6 +173,22 @@ bool StatResult::IsDirectory() const
 #endif
 }
 
+std::string StatResult::CanicalPath() const
+{
+#ifdef WIN32
+    return Utf16ToUtf8(CanicalPathW());
+#endif
+#ifdef __linux__
+    char* posixPathPtr = ::realpath(m_path.c_str(), nullptr);
+    if (posixPathPtr == nullptr) {
+        return "";
+    }
+    std::string posixPath(posixPathPtr);
+    ::free(posixPathPtr);
+    return posixPath;
+#endif
+}
+
 #ifdef WIN32
 bool StatResult::IsArchive() const { return (m_handleFileInformation.dwFileAttributes & FILE_ATTRIBUTE_ARCHIVE) != 0; }
 bool StatResult::IsCompressed() const { return (m_handleFileInformation.dwFileAttributes & FILE_ATTRIBUTE_COMPRESSED) != 0; }
@@ -191,7 +208,8 @@ DWORD StatResult::ReparseTag() const {
         return DEFAULT_REPARSE_TAG;
     }
     WIN32_FIND_DATAW findFileData{};
-    HANDLE fileHandle = ::FindFirstFileW(m_wPath.c_str(), &findFileData);
+    std::wstring wCanicalPath = CanicalPathW();
+    HANDLE fileHandle = ::FindFirstFileW(wCanicalPath.c_str(), &findFileData);
     if (fileHandle == INVALID_HANDLE_VALUE || fileHandle == nullptr) {
         return DEFAULT_REPARSE_TAG;
     }
@@ -200,11 +218,68 @@ DWORD StatResult::ReparseTag() const {
     return findFileData.dwReserved0;
 }
 
+/*
+ * If this sparse point has IO_REPARSE_TAG_MOUNT_POINT tag, it maybe a device mount point or a junction link
+ * if it's device   point, GetVolumeNameForVolumeMountPointW can accquire device name
+ * if it's junction link, GetVolumeNameForVolumeMountPointW will return false
+ */
+std::optional<std::wstring> StatResult::MountedDeviceNameW() const
+{
+    if (!HasReparseMountPointTag()) {
+        return std::nullopt;
+    }
+    WCHAR deviceNameBuff[DEVICE_BUFFER_MAX_LEN] = L"";
+    std::wstring wCanicalPath = CanicalPathW();
+    if (wCanicalPath.back() != L'\\') {
+        wCanicalPath.push_back(L'\\');
+    }
+    if (::GetVolumeNameForVolumeMountPointW(wCanicalPath.c_str(), deviceNameBuff, DEVICE_BUFFER_MAX_LEN)) {
+        return std::make_optional<std::wstring>(deviceNameBuff);
+    }
+    return std::nullopt;
+}
+
+std::optional<std::wstring> StatResult::JunctionsPointTargetPathW() const
+{
+    /* if a directory if junction point, it must has IO_REPARSE_TAG_MOUNT_POINT tag but not have a mounted device */
+    if(!HasReparseMountPointTag() || MountedDeviceNameW()) {
+        return std::nullopt;
+    }
+    return std::nullopt; // TODO
+}
+
+std::optional<std::wstring> StatResult::SymlinkTargetPathW() const
+{
+    if (!HasReparseSymlinkTag()) {
+        return std::nullopt;
+    }
+    return std::nullopt; // TODO
+}
+
 // https://learn.microsoft.com/en-us/windows/win32/fileio/reparse-point-tags
 bool StatResult::HasReparseSymlinkTag() const { return ReparseTag() == IO_REPARSE_TAG_SYMLINK; }
 bool StatResult::HasReparseMountPointTag() const { return ReparseTag() == IO_REPARSE_TAG_MOUNT_POINT; }
 bool StatResult::HasReparseNfsTag() const { return ReparseTag() == IO_REPARSE_TAG_NFS; }
 bool StatResult::HasReparseOneDriveTag() const { return ReparseTag() == IO_REPARSE_TAG_ONEDRIVE; }
+
+std::wstring StatResult::CanicalPathW() const
+{
+    WCHAR wPathBuff[MAX_PATH] = L"";
+    DWORD length = ::GetFullPathNameW(m_wPath.c_str(), MAX_PATH, wPathBuff, nullptr);
+    if (length >= MAX_PATH) {
+        DWORD extendLength = length + 1;
+        WCHAR* wPathExtendBuff = new WCHAR[extendLength];
+        if (::GetFullPathNameW(m_wPath.c_str(), extendLength, wPathExtendBuff, nullptr) == 0) {
+            /* failed */
+            delete[] wPathExtendBuff;
+            return L"";
+        }
+        std::wstring wCanicalPath(wPathExtendBuff);
+        delete[] wPathExtendBuff;
+        return wCanicalPath;
+    }
+    return std::wstring(wPathBuff);
+}
 #endif
 
 #ifdef __linux__
@@ -224,7 +299,7 @@ std::optional<StatResult> Stat(const std::string& path)
     if (stat(path.c_str(), &statbuff) < 0) {
         return std::nullopt;
     }
-    return std::make_optional<StatResult>(statbuff);
+    return std::make_optional<StatResult>(path, statbuff);
 #endif
 #ifdef WIN32
     return StatW(Utf8ToUtf16(path));

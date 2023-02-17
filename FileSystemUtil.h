@@ -69,7 +69,7 @@ std::string Utf16ToUtf8(const std::wstring& wstr);
 class StatResult {
 public:
 #ifdef __linux__
-    StatResult(const struct stat& statbuff);
+    StatResult(const std::string& path, const struct stat& statbuff);
 #endif
 
 #ifdef WIN32
@@ -99,6 +99,7 @@ public:
     uint64_t LinksCount() const; /* no of hard links to the file, on WIN32 always set to 1 on non - NTFS fs */
 
     bool IsDirectory() const;
+    std::string CanicalPath() const;
 
 #ifdef WIN32
     /* based on dwFileAttributes field */
@@ -117,10 +118,15 @@ public:
     
     /* reparse point related methods */
     DWORD ReparseTag() const;
+    std::optional<std::wstring> MountedDeviceNameW() const;
+    std::optional<std::wstring> JunctionsPointTargetPathW() const;
+    std::optional<std::wstring> SymlinkTargetPathW() const;
     bool HasReparseSymlinkTag() const;
     bool HasReparseMountPointTag() const;
     bool HasReparseNfsTag() const;
     bool HasReparseOneDriveTag() const;
+
+    std::wstring CanicalPathW() const;
 #endif
 
 #ifdef __linux__
@@ -137,6 +143,7 @@ public:
 private:
 #ifdef __linux__
     struct stat m_stat {};
+    std::string m_path;
 #endif
 #ifdef WIN32
     BY_HANDLE_FILE_INFORMATION m_handleFileInformation{};

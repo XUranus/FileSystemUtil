@@ -99,7 +99,7 @@ int DoStatCommand(const std::string& path)
 #endif
         return 1;
     }
-    std::cout << "Name: \t\t" << path << std::endl;
+    std::cout << "Name: \t\t" << statResult->CanicalPath() << std::endl;
     std::cout << "Type: \t\t" << (statResult->IsDirectory() ? "Directory" : "File") << std::endl;
     std::cout << "UniqueID: \t" << statResult->UniqueID() << std::endl;
     std::cout << "Size: \t\t" << statResult->Size() << std::endl;
@@ -112,11 +112,19 @@ int DoStatCommand(const std::string& path)
     std::cout << "Attr: \t\t" << statResult->Attribute() << std::endl;
     std::cout << "Flags: \t\t" << Win32FileAttributeFlagsToString(statResult.value()) << std::endl;
     if (statResult->IsReparsePoint()) {
-        std::cout << "Reparse: \t";
-        if (statResult->HasReparseMountPointTag()) { std::cout << "MountPoint" << std::endl; }
-        if (statResult->HasReparseNfsTag()) { std::cout << "NFS" << std::endl; }
-        if (statResult->HasReparseOneDriveTag()) { std::cout << "Onedrive" << std::endl; }
-        if (statResult->HasReparseSymlinkTag()) { std::cout << "Symlink" << std::endl; }
+        if (statResult->HasReparseMountPointTag()) { std::cout << "Reparse: \tMountPoint" << std::endl; }
+        if (statResult->HasReparseNfsTag()) { std::cout << "Reparse: \tNFS" << std::endl; }
+        if (statResult->HasReparseOneDriveTag()) { std::cout << "Reparse: \tOnedrive" << std::endl; }
+        if (statResult->HasReparseSymlinkTag()) { std::cout << "Reparse: \tSymlink" << std::endl; }
+        if (statResult->MountedDeviceNameW()) {
+            std::wcout << L"Device: \t\t" << statResult->MountedDeviceNameW().value() << std::endl;
+        }
+        if (statResult->JunctionsPointTargetPathW()) {
+            std::wcout << L"Junction: \t" << statResult->JunctionsPointTargetPathW().value() << std::endl;
+        }
+        if (statResult->SymlinkTargetPathW()) {
+            std::wcout << L"Symlink: \t\t" << statResult->SymlinkTargetPathW().value() << std::endl;
+        }
     }
 #endif
 #ifdef __linux__
@@ -148,7 +156,9 @@ int DoListCommand(const std::string& path)
             if (subStatResult) {
                 std::cout
                     << "UniqueID: " << subStatResult->UniqueID() << "\t"
+#ifdef WIN32
                     << "Attribute: " << subStatResult->Attribute() << "\t"
+#endif
                     << "Type: " << (subStatResult->IsDirectory() ? "Directory" : "File") << "\t"
                     << "Path: " << openDirEntry->FullPath()
                     << std::endl;
