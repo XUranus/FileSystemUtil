@@ -376,7 +376,7 @@ std::optional<StatResult> StatW(const std::wstring& wPath)
     BY_HANDLE_FILE_INFORMATION handleFileInformation{};
     HANDLE hFile = ::CreateFileW(wPath.c_str(), GENERIC_READ,
         FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, 0);
-    if (hFile == nullptr || hFile == INVALID_HANDLE_VALUE) {
+    if (hFile == INVALID_HANDLE_VALUE) {
         return std::nullopt;
     }
     if (::GetFileInformationByHandle(hFile, &handleFileInformation) == 0) {
@@ -558,7 +558,7 @@ std::optional<OpenDirEntry> OpenDir(const std::string& path)
     wpathPattern += L"*.*";
     WIN32_FIND_DATAW findFileData{};
     HANDLE fileHandle = ::FindFirstFileW(wpathPattern.c_str(), &findFileData);
-    if (fileHandle == INVALID_HANDLE_VALUE || fileHandle == nullptr) {
+    if (fileHandle == INVALID_HANDLE_VALUE) {
         return std::nullopt;
     }
     return std::make_optional<OpenDirEntry>(path, findFileData, fileHandle);
@@ -677,10 +677,80 @@ SparseRangeResult QuerySparseWin32AllocateRangesW(const std::wstring& wPath)
     return std::make_optional(ranges);
 }
 
-bool CopySparseFileWin32W(const std::wstring& wSrcPath, const std::string& wDstPath,
+bool CopySparseFileWin32W(const std::wstring& wSrcPath, const std::wstring& wDstPath,
     const std::vector<std::pair<uint64_t, uint64_t>>& ranges)
 {
-    return false;
+    const int DEFAULT_BUFF_SIZE = 1024;
+    char buff[DEFAULT_BUFF_SIZE] = "\0";
+    /* open file for read */
+    HANDLE hInFile = ::CreateFileW(wSrcPath.c_str(),
+        GENERIC_READ,
+        FILE_SHARE_READ,
+        nullptr,
+        OPEN_EXISTING,
+        0,
+        nullptr);
+    if (hInFile == INVALID_HANDLE_VALUE) {
+        return false;
+    }
+    /* open file for write */
+    HANDLE hOutFile = ::CreateFileW(wDstPath.c_str(),
+        GENERIC_WRITE,
+        FILE_SHARE_READ | FILE_SHARE_WRITE,
+        nullptr,
+        CREATE_ALWAYS,
+        0,
+        nullptr);
+    if (hOutFile == INVALID_HANDLE_VALUE) {
+        ::CloseHandle(hInFile);
+        return false;
+    }
+    /* set taget file sparse */
+    DWORD dwTemp; /* store the setted attribute */
+    ::DeviceIoControl(hOutFile,
+        FSCTL_SET_SPARSE,
+        nullptr,
+        0,
+        nullptr,
+        0,
+        &dwTemp,
+        nullptr);
+
+    for (const std::pair<uint64_t, uint64_t>& range : ranges) {
+        uint64_t offset = range.first;
+        uint64_t len = range.second;
+        do {
+            int nbytes = 0; /* n bytes to copy in this batch */
+            ::SetFilePointer(hInFile, offset, nullptr, FILE_BEGIN); /* set fd to the beginning of the range */
+            ::SetFilePointer(hOutFile, offset, nullptr, FILE_BEGIN);
+            nbytes = min(len, sizeof(buff)); /* if the range can be copied in this batch */
+            if (!::ReadFile(hInFile, buff, nbytes, nullptr, nullptr)) {
+                /* read failed */
+                ::CloseHandle(hInFile);
+                ::CloseHandle(hOutFile);
+                return false;
+            }
+            DWORD nWritten = 0;
+            if (!::WriteFile(hOutFile, buff, nbytes, &nWritten, nullptr)) {
+                /* write failed */
+                ::CloseHandle(hInFile);
+                ::CloseHandle(hOutFile);
+                return false;
+            }
+            offset = offset + nbytes; /* reset offset and length */
+            len = len - nbytes;
+        } while (len != 0);
+    }
+    /* if a hole is at the end of file */
+    DWORD srcEnd = ::SetFilePointer(hInFile, 0, nullptr, FILE_END);
+    DWORD dstEnd = ::SetFilePointer(hOutFile, 0, nullptr, FILE_END);
+    if (srcEnd != dstEnd) {
+        // TODO
+    }
+    /* copy success */
+    ::CloseHandle(hInFile);
+    ::CloseHandle(hOutFile);
+    return true;
 }
 #endif
 

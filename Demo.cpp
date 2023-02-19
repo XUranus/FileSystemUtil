@@ -309,8 +309,8 @@ int wmain(int argc, WCHAR** argv)
             return DoMkdirCommand(Utf16ToUtf8(std::wstring(argv[i + 1])));
         } else if (std::wstring(argv[i]) == L"-sparse" && i + 1 < argc) {
             return DoQuerySparseCommand(Utf16ToUtf8(std::wstring(argv[i + 1])));
-        } else if (std::string(argv[i]) == "-cpsparse" && i + 2 < argc) {
-            return DoCopySparseCommand(Utf16ToUtf8(std::string(argv[i + 1])), Utf16ToUtf8(std::string(argv[i + 2])));
+        } else if (std::wstring(argv[i]) == L"-cpsparse" && i + 2 < argc) {
+            return DoCopySparseCommand(Utf16ToUtf8(std::wstring(argv[i + 1])), Utf16ToUtf8(std::wstring(argv[i + 2])));
         } else if (std::wstring(argv[i]) == L"-getsd" && i + 1 < argc) {
             return DoGetSecurityDescriptorWCommand(std::wstring(argv[i + 1]));
         } else if (std::wstring(argv[i]) == L"--drivers") {

@@ -236,7 +236,7 @@ bool CopySparseFile(const std::string& srcPath, const std::string& dstPath,
     const std::vector<std::pair<uint64_t, uint64_t>>& ranges);
 #ifdef WIN32
 SparseRangeResult QuerySparseWin32AllocateRangesW(const std::wstring& wPath);
-bool CopySparseFileWin32W(const std::wstring& wSrcPath, const std::string& wDstPath,
+bool CopySparseFileWin32W(const std::wstring& wSrcPath, const std::wstring& wDstPath,
     const std::vector<std::pair<uint64_t, uint64_t>>& ranges);
 #endif
 #ifdef __linux__
