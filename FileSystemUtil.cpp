@@ -1,4 +1,5 @@
 ﻿#include "FileSystemUtil.h"
+#include <cstdint>
 
 #ifdef WIN32
 #define _SILENCE_CXX17_CODECVT_HEADER_DEPRECATION_WARNING 1
@@ -592,8 +593,29 @@ SparseRangeResult QuerySparseAllocateRanges(const std::string& path)
         return std::nullopt;
     }
     return QuerySparseWin32AllocateRangesW(Utf8ToUtf16(path));
-#else
+#endif
+#ifdef __linux__
     return QuerySparsePosixAllocateRanges(path);
+#endif
+}
+
+bool CopySparseFile(const std::string& srcPath, const std::string& dstPath,
+    const std::vector<std::pair<uint64_t, uint64_t>>& ranges)
+{
+    std::optional<StatResult> srcResult = Stat(srcPath);
+    std::optional<StatResult> dstResult = Stat(dstPath);
+    /* check if is a file */
+    if (!srcResult || dstResult || srcResult->IsDirectory()) {
+        return false;
+    }
+#ifdef WIN32
+    if (!srcResult->IsSparseFile()) {
+        return false;
+    }
+    return CopySparseFileWin32W(Utf8ToUtf16(srcPath), Utf8ToUtf16(dstPath), ranges);
+#endif
+#ifdef __linux__
+    return CopySparseFilePosix(srcPath, dstPath, ranges);
 #endif
 }
 
@@ -654,6 +676,12 @@ SparseRangeResult QuerySparseWin32AllocateRangesW(const std::wstring& wPath)
     ::CloseHandle(hFile);
     return std::make_optional(ranges);
 }
+
+bool CopySparseFileWin32W(const std::wstring& wSrcPath, const std::string& wDstPath,
+    const std::vector<std::pair<uint64_t, uint64_t>>& ranges)
+{
+    return false;
+}
 #endif
 
 #ifdef __linux__
@@ -690,6 +718,63 @@ SparseRangeResult QuerySparsePosixAllocateRanges(const std::string& path)
     /* kernel not support sparse file */
     return std::nullopt;
 #endif
+}
+
+bool CopySparseFilePosix(const std::string& srcPath, const std::string& dstPath,
+    const std::vector<std::pair<uint64_t, uint64_t>>& ranges)
+{
+    const int DEFAULT_BUFF_SIZE = 1024;
+    char buff[DEFAULT_BUFF_SIZE] = "\0";
+    int inFd = ::open(srcPath.c_str(), O_RDONLY);
+    if (inFd < 0) {
+        return false;
+    }
+    int outFd = ::open(dstPath.c_str() ,O_RDWR | O_CREAT | O_EXCL, S_IRUSR | S_IWUSR);
+    if (outFd < 0) {
+        ::close(inFd);
+        return false;
+    }
+    for (const std::pair<uint64_t, uint64_t>& range: ranges) {
+        uint64_t offset = range.first;
+        uint64_t len = range.second;
+        do {
+            int nbytes = 0; /* n bytes to copy in this batch */
+            ::lseek(inFd, offset, SEEK_SET); /* set fd to the beginning of the range */
+            ::lseek(outFd, offset, SEEK_SET);
+            nbytes = min(len, sizeof(buff)); /* if the range can be copied in this batch */
+            int n = ::read(inFd, buff, nbytes);
+            if (n != nbytes) {
+                /* read failed */
+                ::close(inFd);
+                ::close(outFd);
+                return false;
+            }
+            n = ::write(outFd, buff, nbytes);
+            if (n != nbytes) {
+                /* write failed */
+                ::close(inFd);
+                ::close(outFd);
+                return false;
+            }
+            offset = offset + nbytes; /* reset offset and length */
+            len = len - nbytes;
+        } while (len != 0);
+    }
+    /* if a hole is at the end of file */
+    off_t srcEnd = ::lseek(inFd, 0, SEEK_END);
+    off_t dstEnd = ::lseek(outFd, 0, SEEK_END);
+    if (srcEnd != dstEnd) {
+        if (::ftruncate(outFd, srcEnd) < 0) {
+            /* truncate failed */
+            ::close(inFd);
+            ::close(outFd);
+            return false;
+        }
+    }
+    /* copy success */
+    ::close(inFd);
+    ::close(outFd);
+    return true;
 }
 #endif
 
