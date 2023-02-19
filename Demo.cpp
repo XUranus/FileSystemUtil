@@ -117,13 +117,13 @@ int DoStatCommand(const std::string& path)
         if (statResult->HasReparseOneDriveTag()) { std::cout << "Reparse: \tOnedrive" << std::endl; }
         if (statResult->HasReparseSymlinkTag()) { std::cout << "Reparse: \tSymlink" << std::endl; }
         if (statResult->MountedDeviceNameW()) {
-            std::wcout << L"Device: \t\t" << statResult->MountedDeviceNameW().value() << std::endl;
+            std::wcout << L"Device: \t" << statResult->MountedDeviceNameW().value() << std::endl;
         }
         if (statResult->JunctionsPointTargetPathW()) {
             std::wcout << L"Junction: \t" << statResult->JunctionsPointTargetPathW().value() << std::endl;
         }
         if (statResult->SymlinkTargetPathW()) {
-            std::wcout << L"Symlink: \t\t" << statResult->SymlinkTargetPathW().value() << std::endl;
+            std::wcout << L"Symlink: \t" << statResult->SymlinkTargetPathW().value() << std::endl;
         }
     }
 #endif
@@ -154,12 +154,24 @@ int DoListCommand(const std::string& path)
             }
             std::optional<StatResult> subStatResult = Stat(openDirEntry->FullPath());
             if (subStatResult) {
+                std::string type = subStatResult->IsDirectory() ? "Directory" : "File";
+#ifdef WIN32
+                if (subStatResult->SymlinkTargetPathW()) {
+                    type = "Symbolic";
+                }
+                if (subStatResult->JunctionsPointTargetPathW()) {
+                    type = "Junction";
+                }
+                if (subStatResult->MountedDeviceNameW()) {
+                    type = "MountDev";
+                }
+#endif
                 std::cout
                     << "UniqueID: " << subStatResult->UniqueID() << "\t"
 #ifdef WIN32
                     << "Attribute: " << subStatResult->Attribute() << "\t"
 #endif
-                    << "Type: " << (subStatResult->IsDirectory() ? "Directory" : "File") << "\t"
+                    << "Type: " << type << "\t"
                     << "Path: " << openDirEntry->FullPath()
                     << std::endl;
                 total++;
@@ -291,6 +303,9 @@ int wmain(int argc, WCHAR** argv)
     PrintHelp();
     std::cout << "invalid parameters";
     return 1;
+
+
+
 }
 
 #else

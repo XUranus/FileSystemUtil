@@ -230,6 +230,7 @@ std::optional<std::wstring> StatResult::MountedDeviceNameW() const
     }
     WCHAR deviceNameBuff[DEVICE_BUFFER_MAX_LEN] = L"";
     std::wstring wCanicalPath = CanicalPathW();
+    /* GetVolumeNameForVolumeMountPointW require input path to end with backslash */
     if (wCanicalPath.back() != L'\\') {
         wCanicalPath.push_back(L'\\');
     }
@@ -242,10 +243,29 @@ std::optional<std::wstring> StatResult::MountedDeviceNameW() const
 std::optional<std::wstring> StatResult::JunctionsPointTargetPathW() const
 {
     /* if a directory if junction point, it must has IO_REPARSE_TAG_MOUNT_POINT tag but not have a mounted device */
-    if(!HasReparseMountPointTag() || MountedDeviceNameW()) {
+    if (!HasReparseMountPointTag() || MountedDeviceNameW()) {
         return std::nullopt;
     }
-    return std::nullopt; // TODO
+    /* 
+     * both junction point and symbolic link point can obtain it's final path
+     * due to lack to offical api to determine if a reparse point with IO_REPARSE_TAG_MOUNT_POINT tag is a junction point,
+     * we obtain both final path and canical path to do case insensitive comparison
+     * if wFinalPath and wCanicalPath not equal, we consider wFinalPath as it's target path
+     */
+    std::optional<std::wstring> wFinalPath = FinalPathW();
+    std::optional<std::wstring> wCanicalPath = CanicalPathW();
+    if (!wFinalPath || !wCanicalPath) {
+        return std::nullopt;
+    }
+    std::string finalPathStr = Utf16ToUtf8(wFinalPath.value());
+    std::string canicalPathStr = Utf16ToUtf8(wCanicalPath.value());
+    std::transform(finalPathStr.begin(), finalPathStr.end(), finalPathStr.begin(), ::tolower);
+    std::transform(canicalPathStr.begin(), canicalPathStr.end(), canicalPathStr.begin(), ::tolower);
+    if (finalPathStr == canicalPathStr) {
+        /* imposible to be a junction point */
+        return std::nullopt;
+    }
+    return wFinalPath;
 }
 
 std::optional<std::wstring> StatResult::SymlinkTargetPathW() const
@@ -253,7 +273,43 @@ std::optional<std::wstring> StatResult::SymlinkTargetPathW() const
     if (!HasReparseSymlinkTag()) {
         return std::nullopt;
     }
-    return std::nullopt; // TODO
+    return FinalPathW();
+}
+
+std::optional<std::wstring> StatResult::FinalPathW() const
+{
+    BY_HANDLE_FILE_INFORMATION handleFileInformation{};
+    HANDLE hFile = ::CreateFileW(m_wPath.c_str(), GENERIC_READ,
+        FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, 0);
+    if (hFile == nullptr || hFile == INVALID_HANDLE_VALUE) {
+        return std::nullopt;
+    }
+    WCHAR wPathBuff[MAX_PATH] = L"";
+    DWORD length = ::GetFinalPathNameByHandleW(hFile, wPathBuff, MAX_PATH, FILE_NAME_NORMALIZED);
+    if (length == 0) {
+        /* failed */
+        ::CloseHandle(hFile);
+        return std::nullopt;
+    }
+    if (length >= MAX_PATH) {
+        DWORD extendLength = length + 1;
+        WCHAR* wPathExtendBuff = new WCHAR[extendLength];
+        if (::GetFinalPathNameByHandleW(hFile, wPathExtendBuff, extendLength, FILE_NAME_NORMALIZED) == 0) {
+            /* failed */
+            delete[] wPathExtendBuff;
+            ::CloseHandle(hFile);
+            return std::nullopt;
+        }
+        /* succeed */
+        ::CloseHandle(hFile);
+        std::wstring wTargetPath(wPathExtendBuff);
+        delete[] wPathExtendBuff;
+        return NormalizeWin32PathW(wTargetPath);
+    }
+    /* succeed */
+    ::CloseHandle(hFile);
+    std::wstring wTargetPath(wPathBuff);
+    return NormalizeWin32PathW(wTargetPath);
 }
 
 // https://learn.microsoft.com/en-us/windows/win32/fileio/reparse-point-tags
@@ -266,6 +322,10 @@ std::wstring StatResult::CanicalPathW() const
 {
     WCHAR wPathBuff[MAX_PATH] = L"";
     DWORD length = ::GetFullPathNameW(m_wPath.c_str(), MAX_PATH, wPathBuff, nullptr);
+    if (length == 0) {
+        /* failed */
+        return L"";
+    }
     if (length >= MAX_PATH) {
         DWORD extendLength = length + 1;
         WCHAR* wPathExtendBuff = new WCHAR[extendLength];
@@ -274,11 +334,14 @@ std::wstring StatResult::CanicalPathW() const
             delete[] wPathExtendBuff;
             return L"";
         }
+        /* succeed */
         std::wstring wCanicalPath(wPathExtendBuff);
         delete[] wPathExtendBuff;
-        return wCanicalPath;
+        return NormalizeWin32PathW(wCanicalPath);
     }
-    return std::wstring(wPathBuff);
+    /* succeed */
+    std::wstring wCanicalPath(wPathBuff);
+    return NormalizeWin32PathW(wCanicalPath);
 }
 #endif
 
@@ -935,6 +998,24 @@ std::optional<std::string> GetSACL(const std::string& path)
         return std::nullopt;
     }
     return std::make_optional<std::string>(Utf16ToUtf8(result.value()));
+}
+
+std::wstring NormalizeWin32PathW(std::wstring& wPath)
+{
+    std::wstring wNormalizedPath = wPath;
+    /* example: \\?\C:\Test\Dir1 => C:\Test\Dir1 */
+    const std::wstring prefix = L"\\\\?\\";
+    if (wNormalizedPath.find(prefix) == 0) {
+        wNormalizedPath = wNormalizedPath.substr(prefix.length());
+    }
+    while (!wNormalizedPath.empty() && wNormalizedPath.back() == L'\\') {
+        wNormalizedPath.pop_back();
+    }
+    /* example: C: */
+    if (wNormalizedPath.length() == 2 && wNormalizedPath[1] == L':') {
+        wNormalizedPath.push_back(L'\\');
+    }
+    return wNormalizedPath;
 }
 #endif
 

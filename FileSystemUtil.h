@@ -141,13 +141,19 @@ public:
 #endif
 
 private:
+#ifdef WIN32
+    /* final path of the symbolic link/junction point */
+    std::optional<std::wstring> FinalPathW() const;
+#endif
+
+private:
 #ifdef __linux__
     struct stat m_stat {};
-    std::string m_path;
+    std::string m_path; /* raw input path */
 #endif
 #ifdef WIN32
     BY_HANDLE_FILE_INFORMATION m_handleFileInformation{};
-    std::wstring m_wPath;
+    std::wstring m_wPath; /* raw input path */
 #endif
 };
 
@@ -260,6 +266,12 @@ std::optional<std::wstring> GetDACLW(const std::wstring& wPath);
 std::optional<std::string> GetDACL(const std::string& path);
 std::optional<std::wstring> GetSACLW(const std::wstring& wPath);
 std::optional<std::string> GetSACL(const std::string& path);
+
+/*
+ * Normalize windows path, convert the path to the form like C:\Dir1\Dir2
+ * Except root path like C:\, D:\, path won't ends with backslash
+ */
+std::wstring NormalizeWin32PathW(std::wstring& wPath);
 #endif
 
 /* Common cross-platform API */
