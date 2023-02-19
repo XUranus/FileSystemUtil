@@ -226,11 +226,17 @@ std::optional<OpenDirEntry> OpenDir(const std::string& path);
 
 /* Sparse File allocate range API */
 SparseRangeResult QuerySparseAllocateRanges(const std::string& path);
+bool CopySparseFile(const std::string& srcPath, const std::string& dstPath,
+    const std::vector<std::pair<uint64_t, uint64_t>>& ranges);
 #ifdef WIN32
 SparseRangeResult QuerySparseWin32AllocateRangesW(const std::wstring& wPath);
+bool CopySparseFileWin32W(const std::wstring& wSrcPath, const std::string& wDstPath,
+    const std::vector<std::pair<uint64_t, uint64_t>>& ranges);
 #endif
 #ifdef __linux__
 SparseRangeResult QuerySparsePosixAllocateRanges(const std::string& path);
+bool CopySparseFilePosix(const std::string& srcPath, const std::string& dstPath,
+    const std::vector<std::pair<uint64_t, uint64_t>>& ranges);
 #endif
 
 #ifdef WIN32

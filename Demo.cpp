@@ -80,6 +80,7 @@ void PrintHelp()
     std::cout << "fsutil -stat <path> \t\t: print the detail info of directory/file" << std::endl;
     std::cout << "fsutil -mkdir <path> \t\t: create directory recursively" << std::endl;
     std::cout << "fsutil -sparse <path> \t\t: query sparse file allocate ranges" << std::endl;
+    std::cout << "fsutil -cpsparse <src> <dst> \t: copy sparse file" << std::endl;
 #ifdef WIN32
     std::cout << "fsutil -getsd <path> \t\t: get file/directory security descriptor ACE" << std::endl;
     std::cout << "fsutil --drivers \t\t: list drivers" << std::endl;
@@ -200,11 +201,31 @@ int DoQuerySparseCommand(const std::string& path)
     std::cout << "Sparse Allocate Range:" << std::endl;
     uint64_t physicAllocTotal = 0;
     for (const std::pair<uint64_t, uint64_t>& range: result.value()) {
-        physicAllocTotal += (range.second - range.first);
+        physicAllocTotal += range.second;
         std::cout << "offset = " << range.first << " , length = " << range.second << std::endl;
     }
     std::cout << "Physic Allocate Size: " << physicAllocTotal << std::endl;
     std::cout << "Hole Size: " << statResult->Size() - physicAllocTotal << std::endl;
+    return 0;
+}
+
+int DoCopySparseCommand(const std::string& srcPath, const std::string& dstPath)
+{
+    std::optional<StatResult> statResult = Stat(srcPath);
+    if (!statResult) {
+        std::cout << "Source File Not Exist" << std::endl;
+        return -1;
+    }
+    SparseRangeResult result = QuerySparseAllocateRanges(srcPath);
+    if (!result) {
+        std::cout << "Source file is not a sparse file" << std::endl;
+        return -1;
+    }
+    if (!CopySparseFile(srcPath, dstPath, result.value())) {
+        std::cout << "Copy Failed" << std::endl;
+        return -1;
+    }
+    std::cout << "Copy Succeed" << std::endl;
     return 0;
 }
 
@@ -276,6 +297,8 @@ int wmain(int argc, WCHAR** argv)
             return DoMkdirCommand(Utf16ToUtf8(std::wstring(argv[i + 1])));
         } else if (std::wstring(argv[i]) == L"-sparse" && i + 1 < argc) {
             return DoQuerySparseCommand(Utf16ToUtf8(std::wstring(argv[i + 1])));
+        } else if (std::string(argv[i]) == "-cpsparse" && i + 2 < argc) {
+            return DoCopySparseCommand(Utf16ToUtf8(std::string(argv[i + 1])), Utf16ToUtf8(std::string(argv[i + 2])));
         } else if (std::wstring(argv[i]) == L"-getsd" && i + 1 < argc) {
             return DoGetSecurityDescriptorWCommand(std::wstring(argv[i + 1]));
         } else if (std::wstring(argv[i]) == L"--drivers") {
@@ -312,6 +335,8 @@ int main(int argc, char** argv)
             return DoMkdirCommand(std::string(argv[i + 1]));
         } else if (std::string(argv[i]) == "-sparse" && i + 1 < argc) {
             return DoQuerySparseCommand(std::string(argv[i + 1]));
+        } else if (std::string(argv[i]) == "-cpsparse" && i + 2 < argc) {
+            return DoCopySparseCommand(std::string(argv[i + 1]), std::string(argv[i + 2]));
         } else {
             return DoStatCommand(std::string(argv[i]));
         }
