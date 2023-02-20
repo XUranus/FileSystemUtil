@@ -715,7 +715,11 @@ bool CopySparseFileWin32W(const std::wstring& wSrcPath, const std::wstring& wDst
         0,
         &dwTemp,
         nullptr);
-
+    /* truncate target file at first */
+    DWORD totalBytes = ::SetFilePointer(hInFile, 0, nullptr, FILE_END);
+    ::SetFilePointer(hOutFile, totalBytes, nullptr, FILE_BEGIN);
+    ::SetEndOfFile(hOutFile);
+    /* write allocated range */
     for (const std::pair<uint64_t, uint64_t>& range : ranges) {
         uint64_t offset = range.first;
         uint64_t len = range.second;
@@ -740,12 +744,6 @@ bool CopySparseFileWin32W(const std::wstring& wSrcPath, const std::wstring& wDst
             offset = offset + nbytes; /* reset offset and length */
             len = len - nbytes;
         } while (len != 0);
-    }
-    /* if a hole is at the end of file */
-    DWORD srcEnd = ::SetFilePointer(hInFile, 0, nullptr, FILE_END);
-    DWORD dstEnd = ::SetFilePointer(hOutFile, 0, nullptr, FILE_END);
-    if (srcEnd != dstEnd) {
-        // TODO
     }
     /* copy success */
     ::CloseHandle(hInFile);
@@ -804,6 +802,15 @@ bool CopySparseFilePosix(const std::string& srcPath, const std::string& dstPath,
         ::close(inFd);
         return false;
     }
+    /* truncate target file at first */
+    off_t srcSize = ::lseek(inFd, 0, SEEK_END);
+    if (::ftruncate(outFd, srcSize) < 0) {
+        /* truncate failed */
+        ::close(inFd);
+        ::close(outFd);
+        return false;
+    }
+    /* write allocated range */
     for (const std::pair<uint64_t, uint64_t>& range: ranges) {
         uint64_t offset = range.first;
         uint64_t len = range.second;
@@ -829,17 +836,6 @@ bool CopySparseFilePosix(const std::string& srcPath, const std::string& dstPath,
             offset = offset + nbytes; /* reset offset and length */
             len = len - nbytes;
         } while (len != 0);
-    }
-    /* if a hole is at the end of file */
-    off_t srcEnd = ::lseek(inFd, 0, SEEK_END);
-    off_t dstEnd = ::lseek(outFd, 0, SEEK_END);
-    if (srcEnd != dstEnd) {
-        if (::ftruncate(outFd, srcEnd) < 0) {
-            /* truncate failed */
-            ::close(inFd);
-            ::close(outFd);
-            return false;
-        }
     }
     /* copy success */
     ::close(inFd);
