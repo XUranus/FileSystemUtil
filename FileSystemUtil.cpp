@@ -2,7 +2,9 @@
 #include <cstdint>
 
 #ifdef WIN32
-#define _SILENCE_CXX17_CODECVT_HEADER_DEPRECATION_WARNING 1
+#ifndef _SILENCE_CXX17_CODECVT_HEADER_DEPRECATION_WARNING
+#define _SILENCE_CXX17_CODECVT_HEADER_DEPRECATION_WARNING
+#endif
 #include <locale>
 #include <codecvt>
 #include <sddl.h>
@@ -280,8 +282,14 @@ std::optional<std::wstring> StatResult::SymlinkTargetPathW() const
 std::optional<std::wstring> StatResult::FinalPathW() const
 {
     BY_HANDLE_FILE_INFORMATION handleFileInformation{};
-    HANDLE hFile = ::CreateFileW(m_wPath.c_str(), GENERIC_READ,
-        FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, 0);
+    HANDLE hFile = ::CreateFileW(
+        m_wPath.c_str(),
+        GENERIC_READ,
+        FILE_SHARE_READ,
+        nullptr,
+        OPEN_EXISTING,
+        FILE_FLAG_BACKUP_SEMANTICS,
+        0);
     if (hFile == nullptr || hFile == INVALID_HANDLE_VALUE) {
         return std::nullopt;
     }
@@ -374,8 +382,14 @@ std::optional<StatResult> Stat(const std::string& path)
 std::optional<StatResult> StatW(const std::wstring& wPath)
 {
     BY_HANDLE_FILE_INFORMATION handleFileInformation{};
-    HANDLE hFile = ::CreateFileW(wPath.c_str(), GENERIC_READ,
-        FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, 0);
+    HANDLE hFile = ::CreateFileW(
+        wPath.c_str(),
+        GENERIC_READ,
+        FILE_SHARE_READ,
+        nullptr,
+        OPEN_EXISTING,
+        FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT,
+        0);
     if (hFile == INVALID_HANDLE_VALUE) {
         return std::nullopt;
     }
@@ -717,17 +731,20 @@ bool CopySparseFileWin32W(const std::wstring& wSrcPath, const std::wstring& wDst
         nullptr);
     /* truncate target file at first */
     DWORD totalBytes = ::SetFilePointer(hInFile, 0, nullptr, FILE_END);
-    ::SetFilePointer(hOutFile, totalBytes, nullptr, FILE_BEGIN);
+    LARGE_INTEGER sizeEx;
+    sizeEx.QuadPart = totalBytes;
+    ::SetFilePointerEx(hOutFile, sizeEx, nullptr, FILE_BEGIN);
     ::SetEndOfFile(hOutFile);
     /* write allocated range */
     for (const std::pair<uint64_t, uint64_t>& range : ranges) {
         uint64_t offset = range.first;
         uint64_t len = range.second;
+        sizeEx.QuadPart = offset;
         do {
             int nbytes = 0; /* n bytes to copy in this batch */
-            ::SetFilePointer(hInFile, offset, nullptr, FILE_BEGIN); /* set fd to the beginning of the range */
-            ::SetFilePointer(hOutFile, offset, nullptr, FILE_BEGIN);
-            nbytes = min(len, sizeof(buff)); /* if the range can be copied in this batch */
+            ::SetFilePointerEx(hInFile, sizeEx, nullptr, FILE_BEGIN); /* set fd to the beginning of the range */
+            ::SetFilePointerEx(hOutFile, sizeEx, nullptr, FILE_BEGIN);
+            nbytes = len < sizeof(buff) ? len: sizeof(buff); /* if the range can be copied in this batch */
             if (!::ReadFile(hInFile, buff, nbytes, nullptr, nullptr)) {
                 /* read failed */
                 ::CloseHandle(hInFile);

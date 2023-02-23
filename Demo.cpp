@@ -19,16 +19,11 @@ std::string TimestampSecondsToDate(uint64_t timestamp)
     std::chrono::system_clock, std::chrono::seconds>(millsec);
     auto tt = std::chrono::system_clock::to_time_t(tp);
     std::tm* now = std::gmtime(&tt);
-    int year = now->tm_year + 1900;
-    int month = now->tm_mon + 1;
-    int day = now->tm_mday;
-    int hour = now->tm_hour;
-    int minute = now->tm_min;
-    int second = now->tm_sec;
-    char buff[20] = { '\0' };
-    ::snprintf(buff, sizeof(buff), "%04d-%02d-%02d %02d:%02d:%02d",
-    year, month, day, hour, minute, second);
-    return std::string(buff);
+    char strtime[100] = "";
+    if (std::strftime(strtime, sizeof(strtime), "%Y-%m-%d %H:%M:%S", now) > 0) {
+        return std::string(strtime);
+    }
+    return std::to_string(timestamp);
 }
 
 #ifdef WIN32
