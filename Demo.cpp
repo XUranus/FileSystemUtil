@@ -151,15 +151,18 @@ int DoListCommand(const std::string& path)
             std::optional<StatResult> subStatResult = Stat(openDirEntry->FullPath());
             if (subStatResult) {
                 std::string type = subStatResult->IsDirectory() ? "Directory" : "File";
+
 #ifdef WIN32
-                if (subStatResult->SymlinkTargetPathW()) {
-                    type = "Symbolic";
-                }
-                if (subStatResult->JunctionsPointTargetPathW()) {
-                    type = "Junction";
-                }
-                if (subStatResult->MountedDeviceNameW()) {
-                    type = "MountDev";
+                if (subStatResult->IsReparsePoint()) {
+                    if (subStatResult->SymlinkTargetPathW()) {
+                        type = "Symbolic";
+                    } else if (subStatResult->JunctionsPointTargetPathW()) {
+                        type = "Junction";
+                    } else if (subStatResult->MountedDeviceNameW()) {
+                        type = "MountDev";
+                    } else {
+                        type = "Invalid";
+                    }
                 }
 #endif
                 std::cout
