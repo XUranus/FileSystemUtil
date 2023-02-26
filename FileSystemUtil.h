@@ -118,13 +118,17 @@ public:
     
     /* reparse point related methods */
     DWORD ReparseTag() const;
+    bool IsSymbolicLink() const;
+    bool IsJunctionPoint() const;
+    bool IsMountedDevice() const;
     std::optional<std::wstring> MountedDeviceNameW() const;
     std::optional<std::wstring> JunctionsPointTargetPathW() const;
-    std::optional<std::wstring> SymlinkTargetPathW() const;
-    bool HasReparseSymlinkTag() const;
+    std::optional<std::wstring> SymbolicLinkTargetPathW() const;
+    bool HasReparseSymbolicLinkTag() const;
     bool HasReparseMountPointTag() const;
     bool HasReparseNfsTag() const;
     bool HasReparseOneDriveTag() const;
+    std::optional<std::wstring> FinalPathW() const; 
 
     std::wstring CanicalPathW() const;
 #endif
@@ -138,12 +142,6 @@ public:
     bool IsSymLink() const;
     bool IsSocket() const;
     uint64_t Mode() const;
-#endif
-
-private:
-#ifdef WIN32
-    /* final path of the symbolic link/junction point */
-    std::optional<std::wstring> FinalPathW() const;
 #endif
 
 private:
@@ -232,16 +230,22 @@ std::optional<OpenDirEntry> OpenDir(const std::string& path);
 
 /* Sparse File allocate range API */
 SparseRangeResult QuerySparseAllocateRanges(const std::string& path);
-bool CopySparseFile(const std::string& srcPath, const std::string& dstPath,
+bool CopySparseFile(
+    const std::string& srcPath,
+    const std::string& dstPath,
     const std::vector<std::pair<uint64_t, uint64_t>>& ranges);
 #ifdef WIN32
 SparseRangeResult QuerySparseWin32AllocateRangesW(const std::wstring& wPath);
-bool CopySparseFileWin32W(const std::wstring& wSrcPath, const std::wstring& wDstPath,
+bool CopySparseFileWin32W(
+    const std::wstring& wSrcPath,
+    const std::wstring& wDstPath,
     const std::vector<std::pair<uint64_t, uint64_t>>& ranges);
 #endif
 #ifdef __linux__
 SparseRangeResult QuerySparsePosixAllocateRanges(const std::string& path);
-bool CopySparseFilePosix(const std::string& srcPath, const std::string& dstPath,
+bool CopySparseFilePosix(
+    const std::string& srcPath,
+    const std::string& dstPath,
     const std::vector<std::pair<uint64_t, uint64_t>>& ranges);
 #endif
 
@@ -278,6 +282,16 @@ std::optional<std::string> GetSACL(const std::string& path);
  * Except root path like C:\, D:\, path won't ends with backslash
  */
 std::wstring NormalizeWin32PathW(std::wstring& wPath);
+
+/* reparse point related methods */
+bool CreateSymbolicLinkW(
+    const std::wstring& wLinkFilePath,
+    const std::wstring& wTargetPath,
+    const std::wstring& wPrintName,
+    bool isDirectory = false,
+    bool isRelative = true);
+bool CreateJunctionPointW(const std::wstring& wSrcPath, const std::wstring& wDstPath);
+
 #endif
 
 /* Common cross-platform API */

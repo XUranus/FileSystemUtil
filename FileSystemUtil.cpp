@@ -30,11 +30,46 @@ constexpr auto VOLUME_BUFFER_MAX_LEN = MAX_PATH;
 constexpr auto VOLUME_PATH_MAX_LEN = MAX_PATH + 1;
 constexpr auto DEVICE_BUFFER_MAX_LEN = MAX_PATH;
 constexpr auto DEFAULT_REPARSE_TAG = 0;
+const int SYMLINK_FLAG_RELATIVE = 1;
 #endif
 }
 
-namespace FileSystemUtil {
+#ifdef WIN32
+/*
+ * These structure is used for Interal Windows API. 
+ * There's no associated import library to define them, so developers must define them maunally
+ */
 
+/* https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ntifs/ns-ntifs-_reparse_data_buffer?redirectedfrom=MSDN */
+typedef struct _REPARSE_DATA_BUFFER {
+    ULONG  ReparseTag;
+    USHORT ReparseDataLength;
+    USHORT Reserved;
+    union {
+        struct {
+            USHORT SubstituteNameOffset;
+            USHORT SubstituteNameLength;
+            USHORT PrintNameOffset;
+            USHORT PrintNameLength;
+            ULONG  Flags;
+            WCHAR  PathBuffer[1];
+        } SymbolicLinkReparseBuffer;
+        struct {
+            USHORT SubstituteNameOffset;
+            USHORT SubstituteNameLength;
+            USHORT PrintNameOffset;
+            USHORT PrintNameLength;
+            WCHAR  PathBuffer[1];
+        } MountPointReparseBuffer;
+        struct {
+            UCHAR DataBuffer[1];
+        } GenericReparseBuffer;
+    } DUMMYUNIONNAME;
+} REPARSE_DATA_BUFFER, * PREPARSE_DATA_BUFFER;
+#endif
+
+/* Implement Section Begin */
+namespace FileSystemUtil {
 
 #ifdef WIN32
 std::wstring Utf8ToUtf16(const std::string& str)
@@ -206,7 +241,55 @@ bool StatResult::IsNormal() const { return (m_handleFileInformation.dwFileAttrib
 bool StatResult::IsReparsePoint() const { return (m_handleFileInformation.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0; }
 uint64_t StatResult::Attribute() const { return m_handleFileInformation.dwFileAttributes; }
 
-DWORD StatResult::ReparseTag() const {
+
+/* 
+ * return pointer to REPARSE_DATA_BUFFER which store target info of file with reparse attribute,
+ * need to free memory if return non-nullptr value
+ */
+static REPARSE_DATA_BUFFER* GetReparseDataBufferW(const std::wstring& wPath)
+{
+    REPARSE_DATA_BUFFER* pReparseBuffer = nullptr;
+    DWORD dwSize;
+    /* Open the file for read */
+    HANDLE hFile = ::CreateFileW(
+        wPath.c_str(),
+        GENERIC_READ,
+        FILE_SHARE_READ,
+        nullptr,
+        OPEN_EXISTING,
+        FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT,
+        0);
+    if (hFile == INVALID_HANDLE_VALUE) {
+        /* failed */
+        return nullptr;
+    }
+    /* Allocated areas info */
+    pReparseBuffer = (REPARSE_DATA_BUFFER*)::malloc(MAXIMUM_REPARSE_DATA_BUFFER_SIZE);
+    if (pReparseBuffer == nullptr) {
+        /* malloc failed */
+        ::CloseHandle(hFile);
+        return nullptr;
+    }
+    bool ret = ::DeviceIoControl(
+        hFile,
+        FSCTL_GET_REPARSE_POINT,
+        nullptr,
+        0,
+        pReparseBuffer,
+        MAXIMUM_REPARSE_DATA_BUFFER_SIZE,
+        &dwSize,
+        nullptr);
+    if (!ret) {
+        /* failed */
+        ::CloseHandle(hFile);
+        return nullptr;
+    }
+    ::CloseHandle(hFile);
+    return pReparseBuffer;
+}
+
+DWORD StatResult::ReparseTag() const
+{
     if (!IsReparsePoint()) {
         return DEFAULT_REPARSE_TAG;
     }
@@ -219,6 +302,26 @@ DWORD StatResult::ReparseTag() const {
     ::FindClose(fileHandle);
     fileHandle = nullptr;
     return findFileData.dwReserved0;
+}
+
+
+bool StatResult::IsSymbolicLink() const { return HasReparseSymbolicLinkTag();}
+
+bool StatResult::IsJunctionPoint() const
+{
+    std::optional<std::wstring> wPath = JunctionsPointTargetPathW();
+    if (!wPath) {
+        return false;
+    }
+    return true;
+}
+
+bool StatResult::IsMountedDevice() const {
+    std::optional<std::wstring> wDeviceName = MountedDeviceNameW();
+    if (!wDeviceName) {
+        return false;
+    }
+    return true;
 }
 
 /*
@@ -245,40 +348,80 @@ std::optional<std::wstring> StatResult::MountedDeviceNameW() const
 
 std::optional<std::wstring> StatResult::JunctionsPointTargetPathW() const
 {
-    /* if a directory if junction point, it must has IO_REPARSE_TAG_MOUNT_POINT tag but not have a mounted device */
-    if (!HasReparseMountPointTag() || MountedDeviceNameW()) {
+    REPARSE_DATA_BUFFER* pReparseBuffer = GetReparseDataBufferW(m_wPath);
+    if (pReparseBuffer == nullptr) {
+        /* failed */
         return std::nullopt;
     }
-    /* 
-     * both junction point and symbolic link point can obtain it's final path
-     * due to lack to offical api to determine if a reparse point with IO_REPARSE_TAG_MOUNT_POINT tag is a junction point,
-     * we obtain both final path and canical path to do case insensitive comparison
-     * if wFinalPath and wCanicalPath not equal, we consider wFinalPath as it's target path
-     */
-    std::optional<std::wstring> wFinalPath = FinalPathW();
-    std::optional<std::wstring> wCanicalPath = CanicalPathW();
-    if (!wFinalPath || !wCanicalPath) {
+    if (pReparseBuffer->ReparseTag != IO_REPARSE_TAG_MOUNT_POINT) {
+        /* not a symbolic link */
+        ::free(pReparseBuffer);
         return std::nullopt;
     }
-    std::string finalPathStr = Utf16ToUtf8(wFinalPath.value());
-    std::string canicalPathStr = Utf16ToUtf8(wCanicalPath.value());
-    std::transform(finalPathStr.begin(), finalPathStr.end(), finalPathStr.begin(), ::tolower);
-    std::transform(canicalPathStr.begin(), canicalPathStr.end(), canicalPathStr.begin(), ::tolower);
-    if (finalPathStr == canicalPathStr) {
-        /* imposible to be a junction point */
+
+    std::wstring wTarget;
+    std::wstring wPrintName;
+
+    USHORT targetNameIndex = pReparseBuffer->MountPointReparseBuffer.SubstituteNameOffset / sizeof(WCHAR);
+    USHORT targetNameLength = pReparseBuffer->MountPointReparseBuffer.SubstituteNameLength / sizeof(WCHAR);
+    USHORT displayNameIndex = pReparseBuffer->MountPointReparseBuffer.PrintNameOffset / sizeof(WCHAR);
+    USHORT displayNameLength = pReparseBuffer->MountPointReparseBuffer.PrintNameLength / sizeof(WCHAR);
+    WCHAR* targetName = &pReparseBuffer->MountPointReparseBuffer.PathBuffer[targetNameIndex];
+    WCHAR* displayName = &pReparseBuffer->MountPointReparseBuffer.PathBuffer[displayNameIndex];
+    wTarget.assign(targetName, targetName + targetNameLength);
+    wPrintName.assign(displayName, displayName + displayNameLength);
+    ::free(pReparseBuffer);
+    
+    /*
+    * Due to lack to offical api to determine if a reparse point with IO_REPARSE_TAG_MOUNT_POINT tag is a junction point,
+    * (both directory junction and device mount point has IO_REPARSE_TAG_MOUNT_POINT tag)
+    * if this directory is a mounted device, wPrintName and wTarget name will also be meaningful (returned as to device ame),
+    * To make sure this method return a target of directory junction, this method will check if it can obtain device name.
+    * If it's a device mount point, return std::nullopt
+    */
+    std::optional<std::wstring> wDeviceName = MountedDeviceNameW();
+    if (wDeviceName) {
         return std::nullopt;
     }
-    return wFinalPath;
+    return std::make_optional<std::wstring>(wPrintName);
 }
 
-std::optional<std::wstring> StatResult::SymlinkTargetPathW() const
+std::optional<std::wstring> StatResult::SymbolicLinkTargetPathW() const
 {
-    if (!HasReparseSymlinkTag()) {
+    REPARSE_DATA_BUFFER* pReparseBuffer = GetReparseDataBufferW(m_wPath);
+    if (pReparseBuffer == nullptr) {
+        /* failed */
         return std::nullopt;
     }
-    return FinalPathW();
+    if (pReparseBuffer->ReparseTag != IO_REPARSE_TAG_SYMLINK) {
+        /* not a symbolic link */
+        ::free(pReparseBuffer);
+        return std::nullopt;
+    }
+
+    std::wstring wTarget;
+    std::wstring wPrintName;
+
+    USHORT targetNameIndex = pReparseBuffer->SymbolicLinkReparseBuffer.SubstituteNameOffset >> 1;
+    USHORT targetNameLength = pReparseBuffer->SymbolicLinkReparseBuffer.SubstituteNameLength >> 1;
+    USHORT displayNameIndex = pReparseBuffer->SymbolicLinkReparseBuffer.PrintNameOffset >> 1;
+    USHORT displayNameLength = pReparseBuffer->SymbolicLinkReparseBuffer.PrintNameLength >> 1;
+    WCHAR* targetName = &pReparseBuffer->SymbolicLinkReparseBuffer.PathBuffer[targetNameIndex];
+    WCHAR* displayName = &pReparseBuffer->SymbolicLinkReparseBuffer.PathBuffer[displayNameIndex];
+    wTarget.assign(targetName, targetName + targetNameLength);
+    wPrintName.assign(displayName, displayName + displayNameLength);
+
+    ::free(pReparseBuffer);
+    return std::make_optional<std::wstring>(wPrintName);
 }
 
+// https://learn.microsoft.com/en-us/windows/win32/fileio/reparse-point-tags
+bool StatResult::HasReparseSymbolicLinkTag() const { return ReparseTag() == IO_REPARSE_TAG_SYMLINK; }
+bool StatResult::HasReparseMountPointTag() const { return ReparseTag() == IO_REPARSE_TAG_MOUNT_POINT; }
+bool StatResult::HasReparseNfsTag() const { return ReparseTag() == IO_REPARSE_TAG_NFS; }
+bool StatResult::HasReparseOneDriveTag() const { return ReparseTag() == IO_REPARSE_TAG_ONEDRIVE; }
+
+/* return final path of reparse target */
 std::optional<std::wstring> StatResult::FinalPathW() const
 {
     BY_HANDLE_FILE_INFORMATION handleFileInformation{};
@@ -290,7 +433,7 @@ std::optional<std::wstring> StatResult::FinalPathW() const
         OPEN_EXISTING,
         FILE_FLAG_BACKUP_SEMANTICS,
         0);
-    if (hFile == nullptr || hFile == INVALID_HANDLE_VALUE) {
+    if (hFile == INVALID_HANDLE_VALUE) {
         return std::nullopt;
     }
     WCHAR wPathBuff[MAX_PATH] = L"";
@@ -320,12 +463,6 @@ std::optional<std::wstring> StatResult::FinalPathW() const
     std::wstring wTargetPath(wPathBuff);
     return NormalizeWin32PathW(wTargetPath);
 }
-
-// https://learn.microsoft.com/en-us/windows/win32/fileio/reparse-point-tags
-bool StatResult::HasReparseSymlinkTag() const { return ReparseTag() == IO_REPARSE_TAG_SYMLINK; }
-bool StatResult::HasReparseMountPointTag() const { return ReparseTag() == IO_REPARSE_TAG_MOUNT_POINT; }
-bool StatResult::HasReparseNfsTag() const { return ReparseTag() == IO_REPARSE_TAG_NFS; }
-bool StatResult::HasReparseOneDriveTag() const { return ReparseTag() == IO_REPARSE_TAG_ONEDRIVE; }
 
 std::wstring StatResult::CanicalPathW() const
 {
@@ -645,7 +782,13 @@ SparseRangeResult QuerySparseWin32AllocateRangesW(const std::wstring& wPath)
     std::vector<std::pair<uint64_t, uint64_t>> ranges;
     /* Open the file for read */
     HANDLE hFile = ::CreateFileW(
-        wPath.c_str(), GENERIC_READ, 0, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+                        wPath.c_str(),
+                        GENERIC_READ,
+                        0,
+                        nullptr,
+                        OPEN_EXISTING,
+                        FILE_ATTRIBUTE_NORMAL,
+                        nullptr);
     if (hFile == INVALID_HANDLE_VALUE) {
         return std::nullopt;
     }
@@ -662,8 +805,14 @@ SparseRangeResult QuerySparseWin32AllocateRangesW(const std::wstring& wPath)
     do
     {
         fFinished = DeviceIoControl(
-                        hFile, FSCTL_QUERY_ALLOCATED_RANGES, &queryRange, sizeof(queryRange),
-                        allocRanges, sizeof(allocRanges), &nbytes, nullptr);
+                        hFile,
+                        FSCTL_QUERY_ALLOCATED_RANGES,
+                        &queryRange,
+                        sizeof(queryRange),
+                        allocRanges,
+                        sizeof(allocRanges),
+                        &nbytes,
+                        nullptr);
         if (!fFinished) {
             DWORD dwError = GetLastError();
             /* ERROR_MORE_DATA is the only error that is normal */
@@ -712,7 +861,7 @@ bool CopySparseFileWin32W(const std::wstring& wSrcPath, const std::wstring& wDst
         GENERIC_WRITE,
         FILE_SHARE_READ | FILE_SHARE_WRITE,
         nullptr,
-        CREATE_ALWAYS,
+        CREATE_NEW,
         0,
         nullptr);
     if (hOutFile == INVALID_HANDLE_VALUE) {
@@ -1184,6 +1333,91 @@ std::wstring NormalizeWin32PathW(std::wstring& wPath)
         wNormalizedPath.push_back(L'\\');
     }
     return wNormalizedPath;
+}
+
+/*
+ * reparse point related methods 
+ * https://github.com/googleprojectzero/symboliclink-testing-tools/blob/main/CommonUtils/ReparsePoint.cpp
+ */
+bool CreateSymbolicLinkW(
+    const std::wstring& wLinkFilePath,
+    const std::wstring& wTagetPath,
+    const std::wstring& wPrintName,
+    bool isDirectory,
+    bool isRelative)
+{
+    /* check if target exist */
+    if (!Exists(Utf16ToUtf8(wTagetPath))) {
+        return false;
+    }
+    HANDLE hFile = ::CreateFileW(wLinkFilePath.c_str(),
+        GENERIC_READ | GENERIC_WRITE,
+        0,
+        0,
+        CREATE_NEW,
+        FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT,
+        0);
+    if (hFile == INVALID_HANDLE_VALUE) {
+        std::cout << 1 << std::endl;
+        return false;
+    }
+    const size_t targetBytes = wTagetPath.size() * 2;
+    const size_t printNameBytes = wPrintName.size() * 2;
+    const size_t pathBufferSize = targetBytes + printNameBytes + 12 + 4;
+    const size_t REPARSE_DATA_BUFFER_HEADER_LENGTH = FIELD_OFFSET(REPARSE_DATA_BUFFER, GenericReparseBuffer.DataBuffer);
+    const size_t totalSize = REPARSE_DATA_BUFFER_HEADER_LENGTH + pathBufferSize;
+
+    REPARSE_DATA_BUFFER* pReparseBuffer = (REPARSE_DATA_BUFFER*)::malloc(totalSize);
+    if (pReparseBuffer == nullptr) {
+        /* malloc failed */
+        ::CloseHandle(hFile);
+        return false;
+    }
+
+    pReparseBuffer->ReparseTag = IO_REPARSE_TAG_SYMLINK;
+    pReparseBuffer->ReparseDataLength = static_cast<USHORT>(pathBufferSize);
+    pReparseBuffer->Reserved = 0;
+
+    pReparseBuffer->SymbolicLinkReparseBuffer.SubstituteNameOffset = 0;
+    pReparseBuffer->SymbolicLinkReparseBuffer.SubstituteNameLength = static_cast<USHORT>(targetBytes);
+    memcpy_s(
+        pReparseBuffer->SymbolicLinkReparseBuffer.PathBuffer,
+        targetBytes + 2,
+        wTagetPath.c_str(),
+        targetBytes + 2);
+    pReparseBuffer->SymbolicLinkReparseBuffer.PrintNameOffset = static_cast<USHORT>(targetBytes + 2);
+    pReparseBuffer->SymbolicLinkReparseBuffer.PrintNameLength = static_cast<USHORT>(printNameBytes);
+    memcpy_s(
+        pReparseBuffer->SymbolicLinkReparseBuffer.PathBuffer + wTagetPath.size() + 1,
+        printNameBytes + 2,
+        wPrintName.c_str(),
+        printNameBytes + 2);
+    pReparseBuffer->SymbolicLinkReparseBuffer.Flags = isRelative ? SYMLINK_FLAG_RELATIVE : 0;
+    /* set reparse buffer */
+    DWORD dwSize = 0;
+    bool ret = ::DeviceIoControl(
+        hFile,
+        FSCTL_SET_REPARSE_POINT,
+        pReparseBuffer,
+        totalSize,
+        nullptr,
+        0,
+        &dwSize,
+        nullptr);
+    if (!ret) {
+        ::CloseHandle(hFile);
+        ::free(pReparseBuffer);
+        return false;
+    }
+    ::CloseHandle(hFile);
+    ::free(pReparseBuffer);
+    return true;
+}
+
+bool CreateJunctionPointW(const std::wstring& wSrcPath, const std::wstring& wDstPath)
+{
+    // TODO
+    return false;
 }
 #endif
 

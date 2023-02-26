@@ -78,6 +78,7 @@ void PrintHelp()
     std::cout << "fsutil -cpsparse <src> <dst> \t: copy sparse file" << std::endl;
 #ifdef WIN32
     std::cout << "fsutil -getsd <path> \t\t: get file/directory security descriptor ACE" << std::endl;
+    std::cout << "fsutil -mksymlink <link> <target> \t\t: create symbolic link" << std::endl;
     std::cout << "fsutil --drivers \t\t: list drivers" << std::endl;
     std::cout << "fsutil --volumes \t\t: list volumes" << std::endl;
 #endif
@@ -111,15 +112,18 @@ int DoStatCommand(const std::string& path)
         if (statResult->HasReparseMountPointTag()) { std::cout << "Reparse: \tMountPoint" << std::endl; }
         if (statResult->HasReparseNfsTag()) { std::cout << "Reparse: \tNFS" << std::endl; }
         if (statResult->HasReparseOneDriveTag()) { std::cout << "Reparse: \tOnedrive" << std::endl; }
-        if (statResult->HasReparseSymlinkTag()) { std::cout << "Reparse: \tSymlink" << std::endl; }
-        if (statResult->MountedDeviceNameW()) {
+        if (statResult->HasReparseSymbolicLinkTag()) { std::cout << "Reparse: \tSymlink" << std::endl; }
+        if (statResult->IsMountedDevice()) {
             std::wcout << L"Device: \t" << statResult->MountedDeviceNameW().value() << std::endl;
         }
-        if (statResult->JunctionsPointTargetPathW()) {
+        if (statResult->IsJunctionPoint()) {
             std::wcout << L"Junction: \t" << statResult->JunctionsPointTargetPathW().value() << std::endl;
         }
-        if (statResult->SymlinkTargetPathW()) {
-            std::wcout << L"Symlink: \t" << statResult->SymlinkTargetPathW().value() << std::endl;
+        if (statResult->IsSymbolicLink()) {
+            std::wcout << L"Symlink: \t" << statResult->SymbolicLinkTargetPathW().value() << std::endl;
+        }
+        if (statResult->FinalPathW()) {
+            std::wcout << L"FinalPath: \t" << statResult->FinalPathW().value() << std::endl;
         }
     }
 #endif
@@ -154,7 +158,7 @@ int DoListCommand(const std::string& path)
 
 #ifdef WIN32
                 if (subStatResult->IsReparsePoint()) {
-                    if (subStatResult->SymlinkTargetPathW()) {
+                    if (subStatResult->SymbolicLinkTargetPathW()) {
                         type = "Symbolic";
                     } else if (subStatResult->JunctionsPointTargetPathW()) {
                         type = "Junction";
@@ -289,6 +293,19 @@ void ListWin32Volumes()
     return;
 }
 
+
+int DoMakeSymlinkCommand(const std::wstring& wLinkFilePath, const std::wstring& wTargetPath)
+{
+    if (CreateSymbolicLinkW(wLinkFilePath, wTargetPath, wTargetPath, true, true)) {
+        std::wcout << wLinkFilePath << L" ===> " << wTargetPath << std::endl;
+        return 0;
+    } else {
+        std::wcout << L"create symbolic link failed" << std::endl;
+        return -1;
+    }
+}
+
+
 int wmain(int argc, WCHAR** argv)
 {
     ::SetConsoleOutputCP(65001); // forcing cmd to use UTF-8 output encoding
@@ -311,6 +328,8 @@ int wmain(int argc, WCHAR** argv)
             return DoCopySparseCommand(Utf16ToUtf8(std::wstring(argv[i + 1])), Utf16ToUtf8(std::wstring(argv[i + 2])));
         } else if (std::wstring(argv[i]) == L"-getsd" && i + 1 < argc) {
             return DoGetSecurityDescriptorWCommand(std::wstring(argv[i + 1]));
+        } else if (std::wstring(argv[i]) == L"-mksymlink" && i + 2 < argc) {
+            return DoMakeSymlinkCommand(std::wstring(argv[i + 1]), std::wstring(argv[i + 2]));
         } else if (std::wstring(argv[i]) == L"--drivers") {
             ListWin32Drivers();
             return 0;
