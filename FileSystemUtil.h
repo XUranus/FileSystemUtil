@@ -287,7 +287,6 @@ std::wstring NormalizeWin32PathW(std::wstring& wPath);
 bool CreateSymbolicLinkW(
     const std::wstring& wLinkFilePath,
     const std::wstring& wTargetPath,
-    const std::wstring& wPrintName,
     bool isDirectory = false,
     bool isRelative = true);
 bool CreateJunctionPointW(const std::wstring& wSrcPath, const std::wstring& wDstPath);

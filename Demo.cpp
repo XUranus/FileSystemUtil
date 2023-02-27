@@ -296,7 +296,7 @@ void ListWin32Volumes()
 
 int DoMakeSymlinkCommand(const std::wstring& wLinkFilePath, const std::wstring& wTargetPath)
 {
-    if (CreateSymbolicLinkW(wLinkFilePath, wTargetPath, wTargetPath, true, true)) {
+    if (CreateSymbolicLinkW(wLinkFilePath, wTargetPath, true, true)) {
         std::wcout << wLinkFilePath << L" ===> " << wTargetPath << std::endl;
         return 0;
     } else {

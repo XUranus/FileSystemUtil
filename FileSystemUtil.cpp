@@ -411,6 +411,10 @@ std::optional<std::wstring> StatResult::SymbolicLinkTargetPathW() const
     wTarget.assign(targetName, targetName + targetNameLength);
     wPrintName.assign(displayName, displayName + displayNameLength);
 
+    std::wcout << L"target: " << wTarget << std::endl;
+    std::wcout << L"printName: " << wPrintName << std::endl;
+    std::wcout << L"flags: " << pReparseBuffer->SymbolicLinkReparseBuffer.Flags << std::endl;
+
     ::free(pReparseBuffer);
     return std::make_optional<std::wstring>(wPrintName);
 }
@@ -879,9 +883,11 @@ bool CopySparseFileWin32W(const std::wstring& wSrcPath, const std::wstring& wDst
         &dwTemp,
         nullptr);
     /* truncate target file at first */
-    DWORD totalBytes = ::SetFilePointer(hInFile, 0, nullptr, FILE_END);
     LARGE_INTEGER sizeEx;
-    sizeEx.QuadPart = totalBytes;
+    if (!::GetFileSizeEx(hInFile, &sizeEx)) {
+        ::CloseHandle(hInFile);
+        return false;
+    }
     ::SetFilePointerEx(hOutFile, sizeEx, nullptr, FILE_BEGIN);
     ::SetEndOfFile(hOutFile);
     /* write allocated range */
@@ -1342,76 +1348,33 @@ std::wstring NormalizeWin32PathW(std::wstring& wPath)
 bool CreateSymbolicLinkW(
     const std::wstring& wLinkFilePath,
     const std::wstring& wTagetPath,
-    const std::wstring& wPrintName,
     bool isDirectory,
     bool isRelative)
 {
-    /* check if target exist */
-    if (!Exists(Utf16ToUtf8(wTagetPath))) {
-        return false;
+    std::wstring wLinkFilePathFinal = wLinkFilePath;
+    std::wstring wTagetPathFinal = wTagetPath;
+    std::wstring wPathNamePrefix = L"\\?\\";
+    if (wLinkFilePathFinal.find(wPathNamePrefix) != 0) {
+        wLinkFilePathFinal = wPathNamePrefix + wLinkFilePathFinal;
     }
-    HANDLE hFile = ::CreateFileW(wLinkFilePath.c_str(),
-        GENERIC_READ | GENERIC_WRITE,
-        0,
-        0,
-        CREATE_NEW,
-        FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT,
-        0);
-    if (hFile == INVALID_HANDLE_VALUE) {
+    if (wTagetPathFinal.find(wPathNamePrefix) != 0) {
+        wTagetPathFinal = wPathNamePrefix + wTagetPathFinal;
+    }
+
+    std::wcout << wLinkFilePathFinal << L" " << wTagetPathFinal  << std::endl;
+
+    /* check if target exist */
+    if (Exists(Utf16ToUtf8(wLinkFilePath))) {
         std::cout << 1 << std::endl;
         return false;
     }
-    const size_t targetBytes = wTagetPath.size() * 2;
-    const size_t printNameBytes = wPrintName.size() * 2;
-    const size_t pathBufferSize = targetBytes + printNameBytes + 12 + 4;
-    const size_t REPARSE_DATA_BUFFER_HEADER_LENGTH = FIELD_OFFSET(REPARSE_DATA_BUFFER, GenericReparseBuffer.DataBuffer);
-    const size_t totalSize = REPARSE_DATA_BUFFER_HEADER_LENGTH + pathBufferSize;
 
-    REPARSE_DATA_BUFFER* pReparseBuffer = (REPARSE_DATA_BUFFER*)::malloc(totalSize);
-    if (pReparseBuffer == nullptr) {
-        /* malloc failed */
-        ::CloseHandle(hFile);
-        return false;
-    }
-
-    pReparseBuffer->ReparseTag = IO_REPARSE_TAG_SYMLINK;
-    pReparseBuffer->ReparseDataLength = static_cast<USHORT>(pathBufferSize);
-    pReparseBuffer->Reserved = 0;
-
-    pReparseBuffer->SymbolicLinkReparseBuffer.SubstituteNameOffset = 0;
-    pReparseBuffer->SymbolicLinkReparseBuffer.SubstituteNameLength = static_cast<USHORT>(targetBytes);
-    memcpy_s(
-        pReparseBuffer->SymbolicLinkReparseBuffer.PathBuffer,
-        targetBytes + 2,
-        wTagetPath.c_str(),
-        targetBytes + 2);
-    pReparseBuffer->SymbolicLinkReparseBuffer.PrintNameOffset = static_cast<USHORT>(targetBytes + 2);
-    pReparseBuffer->SymbolicLinkReparseBuffer.PrintNameLength = static_cast<USHORT>(printNameBytes);
-    memcpy_s(
-        pReparseBuffer->SymbolicLinkReparseBuffer.PathBuffer + wTagetPath.size() + 1,
-        printNameBytes + 2,
-        wPrintName.c_str(),
-        printNameBytes + 2);
-    pReparseBuffer->SymbolicLinkReparseBuffer.Flags = isRelative ? SYMLINK_FLAG_RELATIVE : 0;
-    /* set reparse buffer */
-    DWORD dwSize = 0;
-    bool ret = ::DeviceIoControl(
-        hFile,
-        FSCTL_SET_REPARSE_POINT,
-        pReparseBuffer,
-        totalSize,
-        nullptr,
-        0,
-        &dwSize,
-        nullptr);
-    if (!ret) {
-        ::CloseHandle(hFile);
-        ::free(pReparseBuffer);
-        return false;
-    }
-    ::CloseHandle(hFile);
-    ::free(pReparseBuffer);
-    return true;
+    bool ret = ::CreateSymbolicLinkW(
+        wLinkFilePathFinal.c_str(),
+        wTagetPathFinal.c_str(),
+        isDirectory ? SYMBOLIC_LINK_FLAG_DIRECTORY : 0);
+    std::cout << ::GetLastError() << std::endl;
+    return ret;
 }
 
 bool CreateJunctionPointW(const std::wstring& wSrcPath, const std::wstring& wDstPath)
