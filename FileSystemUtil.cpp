@@ -281,6 +281,7 @@ static REPARSE_DATA_BUFFER* GetReparseDataBufferW(const std::wstring& wPath)
         nullptr);
     if (!ret) {
         /* failed */
+        ::free(pReparseBuffer);
         ::CloseHandle(hFile);
         return nullptr;
     }
