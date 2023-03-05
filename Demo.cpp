@@ -12,7 +12,46 @@
 
 using namespace FileSystemUtil;
 
-std::string TimestampSecondsToDate(uint64_t timestamp)
+std::wstring GetLastErrorAsStringW(DWORD errorMessageID)
+{
+    if (errorMessageID == 0) {
+        return std::wstring(); /* No error message has been recorded */
+    }
+    
+    LPWSTR messageBuffer = nullptr;
+    /* Ask Win32 to give us the string version of that message ID.
+     * The parameters we pass in, tell Win32 to create the buffer that holds the message for us
+     * (because we don't yet know how long the message string will be).
+     */
+    size_t size = ::FormatMessageW(
+        FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+        nullptr,
+        errorMessageID,
+        MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+        (LPWSTR)&messageBuffer,
+        0,
+        nullptr);
+    
+    /* Copy the error message into a std::string */
+    std::wstring wMessage(messageBuffer, size);
+
+    /* Free the Win32's string's buffe */
+    ::LocalFree(messageBuffer);      
+    
+    return wMessage;
+}
+
+static std::string ErrorMessage()
+{
+#ifdef WIN32
+    return Utf16ToUtf8(GetLastErrorAsStringW(::GetLastError()));
+#endif
+#ifdef __linux__
+    return ""; // TODO:: errno to string
+#endif
+}
+
+static std::string TimestampSecondsToDate(uint64_t timestamp)
 {
     auto millsec = std::chrono::seconds(timestamp);
     auto tp = std::chrono::time_point<
@@ -88,12 +127,7 @@ int DoStatCommand(const std::string& path)
 {
     std::optional<StatResult> statResult = Stat(path);
     if (!statResult) {
-#ifdef WIN32
-        std::cout << "stat failed, errcode = " << ::GetLastError() << std::endl;
-#endif
-#ifdef __linux__
-        std::cout << "stat failed, errcode = " << errno << std::endl;
-#endif
+        std::cout << "stat failed, error: " << ErrorMessage() << std::endl;
         return 1;
     }
     std::cout << "Name: \t\t" << statResult->CanicalPath() << std::endl;
@@ -140,10 +174,10 @@ int DoListCommand(const std::string& path)
     std::optional<OpenDirEntry> openDirEntry = OpenDir(path);
     if (!openDirEntry) {
 #ifdef WIN32
-        std::cout << "open dir failed, errcode = " << ::GetLastError() << std::endl;
+        std::cout << "open dir failed, error: " << ErrorMessage() << std::endl;
 #endif
 #ifdef __linux__
-        std::cout << "open dir failed, errcode = " << errno << std::endl;
+        std::cout << "open dir failed, error: " << ErrorMessage() << std::endl;
 #endif
         return 1;
     }
@@ -180,7 +214,7 @@ int DoListCommand(const std::string& path)
                 total++;
             }
             else {
-                std::cout << "Stat " << openDirEntry->FullPath() << " Failed" << std::endl;
+                std::cout << "Stat " << openDirEntry->FullPath() << " Failed, error: " << ErrorMessage() << std::endl;
             }
         } while (openDirEntry->Next());
     }
@@ -274,7 +308,7 @@ void ListWin32Volumes()
 {
     std::optional<std::vector<Win32VolumesDetail>> wVolumes = GetWin32VolumeList();
     if (!wVolumes) {
-        std::wcout << L"failed to list volumes, error: " << ::GetLastError() << std::endl;
+        std::wcout << L"failed to list volumes, error: " << Utf8ToUtf16(ErrorMessage()) << std::endl;
     }
     for (Win32VolumesDetail& volumeDetail: wVolumes.value()) {
         std::wcout << L"Name: \t\t" << volumeDetail.VolumeNameW() << std::endl;
@@ -304,7 +338,6 @@ int DoMakeSymlinkCommand(const std::wstring& wLinkFilePath, const std::wstring& 
         return -1;
     }
 }
-
 
 int wmain(int argc, WCHAR** argv)
 {
