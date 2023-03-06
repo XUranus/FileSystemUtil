@@ -86,6 +86,42 @@ std::string Utf16ToUtf8(const std::wstring& wstr)
     std::wstring_convert<ConvertTypeX> converterX;
     return converterX.to_bytes(wstr);
 }
+
+bool EnablePrivilege()
+{
+    HANDLE hToken;
+    char buf[sizeof(TOKEN_PRIVILEGES) * 2];
+    TOKEN_PRIVILEGES& tkp = *((TOKEN_PRIVILEGES*) buf);
+
+    if (!::OpenProcessToken(
+            GetCurrentProcess(),
+            TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY,
+            &hToken)) {
+        return false;
+    }
+
+    /* enable SeBackupPrivilege, SeRestorePrivilege */
+    if (!::LookupPrivilegeValue(
+            nullptr,
+            SE_BACKUP_NAME,
+            &tkp.Privileges[0].Luid)) { 
+        return false;
+    }
+
+    if (!::LookupPrivilegeValue(
+            nullptr,
+            SE_RESTORE_NAME,
+            &tkp.Privileges[1].Luid)) {
+        return false;
+    }
+
+    tkp.PrivilegeCount = 2;
+    tkp.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
+    tkp.Privileges[1].Attributes = SE_PRIVILEGE_ENABLED;
+
+    ::AdjustTokenPrivileges(hToken, false, &tkp, sizeof(tkp), nullptr, nullptr);
+    return true;   
+}
 #endif
 
 
@@ -211,10 +247,10 @@ bool StatResult::IsDirectory() const
 #endif
 }
 
-std::string StatResult::CanicalPath() const
+std::string StatResult::CanonicalPath() const
 {
 #ifdef WIN32
-    return Utf16ToUtf8(CanicalPathW());
+    return Utf16ToUtf8(CanonicalPathW());
 #endif
 #ifdef __linux__
     char* posixPathPtr = ::realpath(m_path.c_str(), nullptr);
@@ -295,8 +331,8 @@ DWORD StatResult::ReparseTag() const
         return DEFAULT_REPARSE_TAG;
     }
     WIN32_FIND_DATAW findFileData{};
-    std::wstring wCanicalPath = CanicalPathW();
-    HANDLE fileHandle = ::FindFirstFileW(wCanicalPath.c_str(), &findFileData);
+    std::wstring wCanonicalPath = CanonicalPathW();
+    HANDLE fileHandle = ::FindFirstFileW(wCanonicalPath.c_str(), &findFileData);
     if (fileHandle == INVALID_HANDLE_VALUE || fileHandle == nullptr) {
         return DEFAULT_REPARSE_TAG;
     }
@@ -336,12 +372,12 @@ std::optional<std::wstring> StatResult::MountedDeviceNameW() const
         return std::nullopt;
     }
     WCHAR deviceNameBuff[DEVICE_BUFFER_MAX_LEN] = L"";
-    std::wstring wCanicalPath = CanicalPathW();
+    std::wstring wCanonicalPath = CanonicalPathW();
     /* GetVolumeNameForVolumeMountPointW require input path to end with backslash */
-    if (wCanicalPath.back() != L'\\') {
-        wCanicalPath.push_back(L'\\');
+    if (wCanonicalPath.back() != L'\\') {
+        wCanonicalPath.push_back(L'\\');
     }
-    if (::GetVolumeNameForVolumeMountPointW(wCanicalPath.c_str(), deviceNameBuff, DEVICE_BUFFER_MAX_LEN)) {
+    if (::GetVolumeNameForVolumeMountPointW(wCanonicalPath.c_str(), deviceNameBuff, DEVICE_BUFFER_MAX_LEN)) {
         return std::make_optional<std::wstring>(deviceNameBuff);
     }
     return std::nullopt;
@@ -469,7 +505,7 @@ std::optional<std::wstring> StatResult::FinalPathW() const
     return NormalizeWin32PathW(wTargetPath);
 }
 
-std::wstring StatResult::CanicalPathW() const
+std::wstring StatResult::CanonicalPathW() const
 {
     WCHAR wPathBuff[MAX_PATH] = L"";
     DWORD length = ::GetFullPathNameW(m_wPath.c_str(), MAX_PATH, wPathBuff, nullptr);
@@ -486,13 +522,13 @@ std::wstring StatResult::CanicalPathW() const
             return L"";
         }
         /* succeed */
-        std::wstring wCanicalPath(wPathExtendBuff);
+        std::wstring wCanonicalPath(wPathExtendBuff);
         delete[] wPathExtendBuff;
-        return NormalizeWin32PathW(wCanicalPath);
+        return NormalizeWin32PathW(wCanonicalPath);
     }
     /* succeed */
-    std::wstring wCanicalPath(wPathBuff);
-    return NormalizeWin32PathW(wCanicalPath);
+    std::wstring wCanonicalPath(wPathBuff);
+    return NormalizeWin32PathW(wCanonicalPath);
 }
 #endif
 
@@ -1381,8 +1417,67 @@ bool CreateSymbolicLinkW(
 bool CreateJunctionPointW(const std::wstring& wSrcPath, const std::wstring& wDstPath)
 {
     // TODO
+    return CreateSymbolicLinkW(wSrcPath, wTagetPath, true, true);
     return false;
 }
+
+
+/* ADS releated API */
+// https://github.com/chenchao266/mfc/blob/b58abf9eb4c6d90ef01b9f1203b174471293dfba/wfc_sample/Sample/dump_ntfs_streams.cpp
+bool IsAlternateDataStreamW(const std::wstring& wPath)
+{
+    if (!EnablePrivilege()) {
+        return false;
+    }
+    HANDLE hFile = ::CreateFileW(
+        wPath.c_str(),
+        GENERIC_READ,
+        0,
+        nullptr,
+        OPEN_EXISTING,
+		FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_POSIX_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT
+        nullptr 
+    );
+    if (hFile == INVALID_HANDLE_VALUE) {
+        return false;
+    }
+    
+    char buf[4096];
+	DWORD numReaded = 0;
+    DWORD numToSkip = 0;
+	void *ctx = nullptr;
+	WIN32_STREAM_ID& wsi = *((WIN32_STREAM_ID*)buf);
+
+	while (true) {
+		/* we are at the start of a stream header. read it */
+		if (!::BackupRead(hFile, buf, 20, &numReaded, FALSE, TRUE, &ctx)) {
+			return false;
+        }
+		if (numReaded == 0) {
+			break;
+        }
+		if (wsi.dwStreamNameSize > 0)
+		{
+			if (!::BackupRead(fh, buf + 20, wsi.dwStreamNameSize, &numReaded, FALSE, TRUE, &ctx)) {
+				return false;
+            }
+			if (numReaded != wsi.dwStreamNameSize) {
+				break;
+            }
+		}
+		//dumphdr( wsi );
+		/* skip stream data */
+		if (wsi.Size.QuadPart > 0) {
+			DWORD lo, hi;
+			::BackupSeek(fh, 0xffffffffL, 0x7fffffffL, &lo, &hi, &ctx);
+		}
+	}
+
+	/* make NT release the context */
+	BackupRead( fh, buf, 0, &numReaded, TRUE, FALSE, &ctx);
+	::CloseHandle( fh );
+}
+
 #endif
 
 

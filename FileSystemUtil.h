@@ -60,6 +60,8 @@ namespace FileSystemUtil {
  */
 std::wstring Utf8ToUtf16(const std::string& str);
 std::string Utf16ToUtf8(const std::wstring& wstr);
+
+bool EnablePrivilege();
 #endif
 
 /**
@@ -99,7 +101,7 @@ public:
     uint64_t LinksCount() const; /* no of hard links to the file, on WIN32 always set to 1 on non - NTFS fs */
 
     bool IsDirectory() const;
-    std::string CanicalPath() const;
+    std::string CanonicalPath() const;
 
 #ifdef WIN32
     /* based on dwFileAttributes field */
@@ -291,6 +293,9 @@ bool CreateSymbolicLinkW(
     bool isRelative = true);
 bool CreateJunctionPointW(const std::wstring& wSrcPath, const std::wstring& wDstPath);
 
+
+/* ADS releated API */
+bool IsAlternateDataStreamW(const std::wstring& path);
 #endif
 
 /* Common cross-platform API */
