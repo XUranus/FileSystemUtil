@@ -130,7 +130,7 @@ int DoStatCommand(const std::string& path)
         std::cout << "stat failed, error: " << ErrorMessage() << std::endl;
         return 1;
     }
-    std::cout << "Name: \t\t" << statResult->CanicalPath() << std::endl;
+    std::cout << "Name: \t\t" << statResult->CanonicalPath() << std::endl;
     std::cout << "Type: \t\t" << (statResult->IsDirectory() ? "Directory" : "File") << std::endl;
     std::cout << "UniqueID: \t" << statResult->UniqueID() << std::endl;
     std::cout << "Size: \t\t" << statResult->Size() << std::endl;
@@ -159,6 +159,16 @@ int DoStatCommand(const std::string& path)
         if (statResult->FinalPathW()) {
             std::wcout << L"FinalPath: \t" << statResult->FinalPathW().value() << std::endl;
         }
+    }
+    /* check ADS file */
+    std::optional<AlternateDataStreamEntry> adsEntry = OpenAlternateDataStreamW(Utf8ToUtf16(path));
+    if (!adsEntry) {
+        std::cout << "open ADS stream failed, error: " << ErrorMessage() << std::endl;
+    }
+    std::optional<std::wstring> wStreamName;
+    int adsIndex = 0;
+    while (wStreamName = adsEntry->NextStreamNameW()) {
+        std::wcout << L"ADS[" << adsIndex << L"] " << wStreamName.value() << std::endl;
     }
 #endif
 #ifdef __linux__

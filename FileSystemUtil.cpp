@@ -1414,20 +1414,20 @@ bool CreateSymbolicLinkW(
     return ret;
 }
 
-bool CreateJunctionPointW(const std::wstring& wSrcPath, const std::wstring& wDstPath)
+bool CreateJunctionPointW(const std::wstring& wSrcPath, const std::wstring& wTargetPath)
 {
     // TODO
-    return CreateSymbolicLinkW(wSrcPath, wTagetPath, true, true);
+    return CreateSymbolicLinkW(wSrcPath, wTargetPath, true, true);
     return false;
 }
 
 
 /* ADS releated API */
-// https://github.com/chenchao266/mfc/blob/b58abf9eb4c6d90ef01b9f1203b174471293dfba/wfc_sample/Sample/dump_ntfs_streams.cpp
-bool IsAlternateDataStreamW(const std::wstring& wPath)
+std::optional<AlternateDataStreamEntry> OpenAlternateDataStreamW(const std::wstring& wPath)
 {
     if (!EnablePrivilege()) {
-        return false;
+        /* enable privilege failed */
+        return std::nullopt;
     }
     HANDLE hFile = ::CreateFileW(
         wPath.c_str(),
@@ -1435,47 +1435,101 @@ bool IsAlternateDataStreamW(const std::wstring& wPath)
         0,
         nullptr,
         OPEN_EXISTING,
-		FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_POSIX_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT
+		FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_POSIX_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT,
         nullptr 
     );
     if (hFile == INVALID_HANDLE_VALUE) {
-        return false;
+        /* failed to obtain file handle */
+        return std::nullopt;
     }
-    
-    char buf[4096];
-	DWORD numReaded = 0;
-    DWORD numToSkip = 0;
-	void *ctx = nullptr;
-	WIN32_STREAM_ID& wsi = *((WIN32_STREAM_ID*)buf);
+    return std::make_optional<AlternateDataStreamEntry>(hFile);
+}
 
-	while (true) {
+bool IsAlternateDataStreamW(const std::wstring& wPath)
+{
+    std::optional<AlternateDataStreamEntry> adsEntry = OpenAlternateDataStreamW(wPath);
+    std::optional<std::wstring> wStreamName;
+    if (adsEntry->NextStreamNameW()) {
+        return true;
+    }
+    return false;
+}
+
+AlternateDataStreamEntry::AlternateDataStreamEntry(HANDLE hFile)
+{
+    m_hFile = hFile;
+    m_numReaded = 0;
+    m_numToSkip = 0;
+	m_context = nullptr;
+}
+
+std::optional<std::wstring> AlternateDataStreamEntry::NextStreamNameW()
+{
+    if (m_hFile == INVALID_HANDLE_VALUE || m_hFile == nullptr) {
+        return std::nullopt;
+    }
+	WIN32_STREAM_ID& wsi = *((WIN32_STREAM_ID*)m_buff);
+    std::wstring wStreamName;
+	while (wStreamName.empty()) {
 		/* we are at the start of a stream header. read it */
-		if (!::BackupRead(hFile, buf, 20, &numReaded, FALSE, TRUE, &ctx)) {
-			return false;
+		if (!::BackupRead(m_hFile, m_buff, 20, &m_numReaded, FALSE, TRUE, &m_context)) {
+            /* read backup data failed */
+            CloseRead();
+			return std::nullopt;
         }
-		if (numReaded == 0) {
-			break;
+		if (m_numReaded == 0) {
+            /* read completed */
+            CloseRead();
+			return std::nullopt;
         }
 		if (wsi.dwStreamNameSize > 0)
 		{
-			if (!::BackupRead(fh, buf + 20, wsi.dwStreamNameSize, &numReaded, FALSE, TRUE, &ctx)) {
-				return false;
+			if (!::BackupRead(m_hFile, m_buff + 20, wsi.dwStreamNameSize, &m_numReaded, FALSE, TRUE, &m_context)) {
+                /* read backup data failed */
+                CloseRead();
+				return std::nullopt;
             }
-			if (numReaded != wsi.dwStreamNameSize) {
-				break;
+			if (m_numReaded != wsi.dwStreamNameSize) {
+                CloseRead();
+				return std::nullopt;
             }
 		}
-		//dumphdr( wsi );
+        /* check wsi struct and pick whose dwStreamId is BACKUP_ALTERNATE_DATA */
+        if (wsi.dwStreamId == BACKUP_ALTERNATE_DATA && wsi.dwStreamNameSize != 0) {
+            wStreamName = wsi.cStreamName;
+        }
 		/* skip stream data */
 		if (wsi.Size.QuadPart > 0) {
 			DWORD lo, hi;
-			::BackupSeek(fh, 0xffffffffL, 0x7fffffffL, &lo, &hi, &ctx);
+			::BackupSeek(m_hFile, 0xffffffffL, 0x7fffffffL, &lo, &hi, &m_context);
 		}
+        if (!wStreamName.empty()) {
+            break;
+        }
 	}
+    if (!wStreamName.empty()) {
+        return std::make_optional<std::wstring>(wStreamName);
+    }
+    return std::nullopt;
+}
 
-	/* make NT release the context */
-	BackupRead( fh, buf, 0, &numReaded, TRUE, FALSE, &ctx);
-	::CloseHandle( fh );
+
+void AlternateDataStreamEntry::CloseRead()
+{
+    /* make NT release the context */
+    ::BackupRead(m_hFile, m_buff, 0, &m_numReaded, TRUE, FALSE, &m_context);
+	::CloseHandle(m_hFile);
+    m_hFile = INVALID_HANDLE_VALUE;
+    m_context = nullptr;
+}
+
+AlternateDataStreamEntry::~AlternateDataStreamEntry()
+{
+    if (m_hFile != INVALID_HANDLE_VALUE || m_hFile != nullptr) {
+        ::CloseHandle(m_hFile);
+    }
+    m_hFile = INVALID_HANDLE_VALUE;
+    m_context = nullptr;
 }
 
 #endif

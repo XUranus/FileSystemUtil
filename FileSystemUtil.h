@@ -132,7 +132,7 @@ public:
     bool HasReparseOneDriveTag() const;
     std::optional<std::wstring> FinalPathW() const; 
 
-    std::wstring CanicalPathW() const;
+    std::wstring CanonicalPathW() const;
 #endif
 
 #ifdef __linux__
@@ -294,7 +294,30 @@ bool CreateSymbolicLinkW(
 bool CreateJunctionPointW(const std::wstring& wSrcPath, const std::wstring& wDstPath);
 
 
+/* ADS releated API
+ * https://github.com/chenchao266/mfc/blob/b58abf9eb4c6d90ef01b9f1203b174471293dfba/wfc_sample/Sample/dump_ntfs_streams.cpp
+ */
+
+const int WIN32_STREAM_ID_BUFFER_LENGTH_MAX = 4096;
+
+class AlternateDataStreamEntry {
+public:
+    AlternateDataStreamEntry(HANDLE hFile);
+    std::optional<std::wstring> NextStreamNameW();
+    ~AlternateDataStreamEntry();
+
+private:
+    void CloseRead();
+private:
+    HANDLE m_hFile;
+    DWORD m_numReaded = 0;
+    DWORD m_numToSkip = 0;
+	void* m_context = nullptr;
+    unsigned char m_buff[WIN32_STREAM_ID_BUFFER_LENGTH_MAX];
+};
+
 /* ADS releated API */
+std::optional<AlternateDataStreamEntry> OpenAlternateDataStreamW(const std::wstring& wPath);
 bool IsAlternateDataStreamW(const std::wstring& path);
 #endif
 
