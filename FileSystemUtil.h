@@ -60,7 +60,6 @@ namespace FileSystemUtil {
  */
 std::wstring Utf8ToUtf16(const std::string& str);
 std::string Utf16ToUtf8(const std::wstring& wstr);
-
 bool EnablePrivilege();
 #endif
 

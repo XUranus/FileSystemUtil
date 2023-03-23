@@ -31,6 +31,7 @@ constexpr auto VOLUME_PATH_MAX_LEN = MAX_PATH + 1;
 constexpr auto DEVICE_BUFFER_MAX_LEN = MAX_PATH;
 constexpr auto DEFAULT_REPARSE_TAG = 0;
 const int SYMLINK_FLAG_RELATIVE = 1;
+const std::wstring WPATH_PREFIX = LR"(\\?\)";
 #endif
 }
 
@@ -85,6 +86,15 @@ std::string Utf16ToUtf8(const std::wstring& wstr)
     using ConvertTypeX = std::codecvt_utf8_utf16<wchar_t>;
     std::wstring_convert<ConvertTypeX> converterX;
     return converterX.to_bytes(wstr);
+}
+
+inline std::wstring ConvertWin32UnicodePath(const std::wstring& wPath)
+{
+    if (wPath.length() > WPATH_PREFIX.length() && wPath.find(WPATH_PREFIX) == 0) {
+        /* already have prefix */
+        return wPath;
+    }
+    return WPATH_PREFIX + wPath;
 }
 
 bool EnablePrivilege()
@@ -287,8 +297,9 @@ static REPARSE_DATA_BUFFER* GetReparseDataBufferW(const std::wstring& wPath)
     REPARSE_DATA_BUFFER* pReparseBuffer = nullptr;
     DWORD dwSize;
     /* Open the file for read */
+    std::wstring unicodePath = ConvertWin32UnicodePath(wPath);
     HANDLE hFile = ::CreateFileW(
-        wPath.c_str(),
+        unicodePath.c_str(),
         GENERIC_READ,
         FILE_SHARE_READ,
         nullptr,
@@ -332,7 +343,8 @@ DWORD StatResult::ReparseTag() const
     }
     WIN32_FIND_DATAW findFileData{};
     std::wstring wCanonicalPath = CanonicalPathW();
-    HANDLE fileHandle = ::FindFirstFileW(wCanonicalPath.c_str(), &findFileData);
+    std::wstring unicodePath = ConvertWin32UnicodePath(wCanonicalPath);
+    HANDLE fileHandle = ::FindFirstFileW(unicodePath.c_str(), &findFileData);
     if (fileHandle == INVALID_HANDLE_VALUE || fileHandle == nullptr) {
         return DEFAULT_REPARSE_TAG;
     }
@@ -559,9 +571,10 @@ std::optional<StatResult> Stat(const std::string& path)
 #ifdef WIN32
 std::optional<StatResult> StatW(const std::wstring& wPath)
 {
+    std::wstring unicodePath = ConvertWin32UnicodePath(wPath);
     BY_HANDLE_FILE_INFORMATION handleFileInformation{};
     HANDLE hFile = ::CreateFileW(
-        wPath.c_str(),
+        unicodePath.c_str(),
         GENERIC_READ,
         FILE_SHARE_READ,
         nullptr,
@@ -576,7 +589,7 @@ std::optional<StatResult> StatW(const std::wstring& wPath)
         return std::nullopt;
     }
     ::CloseHandle(hFile);
-    DWORD attribute = GetFileAttributesW(wPath.c_str()); /* to detect REPARSE_POINT flag */
+    DWORD attribute = ::GetFileAttributesW(unicodePath.c_str()); /* to detect REPARSE_POINT flag */
     if (attribute != INVALID_FILE_ATTRIBUTES) {
         handleFileInformation.dwFileAttributes = attribute;
     }
@@ -743,7 +756,7 @@ void OpenDirEntry::Close()
 std::optional<OpenDirEntry> OpenDir(const std::string& path)
 {
 #ifdef WIN32
-    std::wstring wpathPattern = Utf8ToUtf16(path);
+    std::wstring wpathPattern = ConvertWin32UnicodePath(Utf8ToUtf16(path));
     if (!wpathPattern.empty() && wpathPattern.back() != L'\\') {
         wpathPattern.push_back(L'\\');
     }
@@ -822,8 +835,9 @@ SparseRangeResult QuerySparseWin32AllocateRangesW(const std::wstring& wPath)
 {
     std::vector<std::pair<uint64_t, uint64_t>> ranges;
     /* Open the file for read */
+    std::wstring unicodePath = ConvertWin32UnicodePath(wPath);
     HANDLE hFile = ::CreateFileW(
-                        wPath.c_str(),
+                        unicodePath.c_str(),
                         GENERIC_READ,
                         0,
                         nullptr,
@@ -887,7 +901,9 @@ bool CopySparseFileWin32W(const std::wstring& wSrcPath, const std::wstring& wDst
     const int DEFAULT_BUFF_SIZE = 1024;
     char buff[DEFAULT_BUFF_SIZE] = "\0";
     /* open file for read */
-    HANDLE hInFile = ::CreateFileW(wSrcPath.c_str(),
+    std::wstring wSrcUnicodePath = ConvertWin32UnicodePath(wSrcPath);
+    HANDLE hInFile = ::CreateFileW(
+        wSrcUnicodePath.c_str(),
         GENERIC_READ,
         FILE_SHARE_READ,
         nullptr,
@@ -898,7 +914,9 @@ bool CopySparseFileWin32W(const std::wstring& wSrcPath, const std::wstring& wDst
         return false;
     }
     /* open file for write */
-    HANDLE hOutFile = ::CreateFileW(wDstPath.c_str(),
+    std::wstring wDstUnicodePath = ConvertWin32UnicodePath(wDstPath);
+    HANDLE hOutFile = ::CreateFileW(
+        wDstUnicodePath.c_str(),
         GENERIC_WRITE,
         FILE_SHARE_READ | FILE_SHARE_WRITE,
         nullptr,
@@ -1222,10 +1240,11 @@ std::optional<std::wstring> GetSecurityDescriptorW(const std::wstring& wPath)
     PSECURITY_DESCRIPTOR psd = nullptr;
     DWORD result = 0;
     LPWSTR wSddlStr = nullptr;
+    std::wstring wPathUnicode = ConvertWin32UnicodePath(wPath);
     try
     {
         result = ::GetNamedSecurityInfoW(
-            wPath.c_str(),
+            wPathUnicode.c_str(),
             SE_FILE_OBJECT,
             DACL_SECURITY_INFORMATION,
             NULL,
@@ -1270,10 +1289,11 @@ std::optional<std::wstring> GetDACLW(const std::wstring& wPath)
     PSECURITY_DESCRIPTOR psd = nullptr;
     DWORD result = 0;
     LPWSTR wSddlStr = nullptr;
+    std::wstring wPathUnicode = ConvertWin32UnicodePath(wPath);
     try
     {
         result = ::GetNamedSecurityInfoW(
-            wPath.c_str(),
+            wPathUnicode.c_str(),
             SE_FILE_OBJECT,
             DACL_SECURITY_INFORMATION,
             NULL,
@@ -1318,10 +1338,11 @@ std::optional<std::wstring> GetSACLW(const std::wstring& wPath)
     PSECURITY_DESCRIPTOR psd = nullptr;
     DWORD result = 0;
     LPWSTR wSddlStr = nullptr;
+    std::wstring wPathUnicode = ConvertWin32UnicodePath(wPath);
     try
     {
         result = ::GetNamedSecurityInfoW(
-            wPath.c_str(),
+            wPathUnicode.c_str(),
             SE_FILE_OBJECT,
             SACL_SECURITY_INFORMATION,
             NULL,
@@ -1364,9 +1385,8 @@ std::wstring NormalizeWin32PathW(std::wstring& wPath)
 {
     std::wstring wNormalizedPath = wPath;
     /* example: \\?\C:\Test\Dir1 => C:\Test\Dir1 */
-    const std::wstring prefix = L"\\\\?\\";
-    if (wNormalizedPath.find(prefix) == 0) {
-        wNormalizedPath = wNormalizedPath.substr(prefix.length());
+    if (wNormalizedPath.find(WPATH_PREFIX) == 0) {
+        wNormalizedPath = wNormalizedPath.substr(WPATH_PREFIX.length());
     }
     while (!wNormalizedPath.empty() && wNormalizedPath.back() == L'\\') {
         wNormalizedPath.pop_back();
@@ -1388,30 +1408,18 @@ bool CreateSymbolicLinkW(
     bool isDirectory,
     bool isRelative)
 {
-    std::wstring wLinkFilePathFinal = wLinkFilePath;
-    std::wstring wTagetPathFinal = wTagetPath;
-    std::wstring wPathNamePrefix = L"\\?\\";
-    if (wLinkFilePathFinal.find(wPathNamePrefix) != 0) {
-        wLinkFilePathFinal = wPathNamePrefix + wLinkFilePathFinal;
-    }
-    if (wTagetPathFinal.find(wPathNamePrefix) != 0) {
-        wTagetPathFinal = wPathNamePrefix + wTagetPathFinal;
-    }
-
-    std::wcout << wLinkFilePathFinal << L" " << wTagetPathFinal  << std::endl;
+    std::wstring wLinkFilePathFinal = ConvertWin32UnicodePath(wLinkFilePath);
+    std::wstring wTagetPathFinal = ConvertWin32UnicodePath(wTagetPath);;
 
     /* check if target exist */
     if (Exists(Utf16ToUtf8(wLinkFilePath))) {
-        std::cout << 1 << std::endl;
         return false;
     }
 
-    bool ret = ::CreateSymbolicLinkW(
+    return ::CreateSymbolicLinkW(
         wLinkFilePathFinal.c_str(),
         wTagetPathFinal.c_str(),
         isDirectory ? SYMBOLIC_LINK_FLAG_DIRECTORY : 0);
-    std::cout << ::GetLastError() << std::endl;
-    return ret;
 }
 
 bool CreateJunctionPointW(const std::wstring& wSrcPath, const std::wstring& wTargetPath)
@@ -1429,8 +1437,9 @@ std::optional<AlternateDataStreamEntry> OpenAlternateDataStreamW(const std::wstr
         /* enable privilege failed */
         return std::nullopt;
     }
+    std::wstring wPathUnicode = ConvertWin32UnicodePath(wPath);
     HANDLE hFile = ::CreateFileW(
-        wPath.c_str(),
+        wPathUnicode.c_str(),
         GENERIC_READ,
         0,
         nullptr,
@@ -1570,8 +1579,8 @@ bool Exists(const std::string& path)
 bool Mkdir(const std::string& path)
 {
 #ifdef WIN32
-    std::wstring wPath = Utf8ToUtf16(path);
-    return CreateDirectoryW(wPath.c_str(), nullptr);
+    std::wstring wPathUnicode = ConvertWin32UnicodePath(Utf8ToUtf16(path));
+    return CreateDirectoryW(wPathUnicode.c_str(), nullptr);
 #endif
 #ifdef __linux__
     int ret = mkdir(path.c_str(), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
