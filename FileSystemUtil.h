@@ -165,8 +165,10 @@ class OpenDirEntry
 {
 public:
 #ifdef WIN32
-    OpenDirEntry(const std::string& dirPath,
-    const WIN32_FIND_DATAW& findFileData, const HANDLE& fileHandle);
+    OpenDirEntry(
+        const std::string&          dirPath,
+        const WIN32_FIND_DATAW&     findFileData,
+        const HANDLE&               fileHandle);
     bool IsArchive() const;
     bool IsCompressed() const;
     bool IsEncrypted() const;

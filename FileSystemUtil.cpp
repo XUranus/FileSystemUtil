@@ -598,8 +598,11 @@ std::optional<StatResult> StatW(const std::wstring& wPath)
 #endif
 
 #ifdef WIN32
-OpenDirEntry::OpenDirEntry(const std::string& dirPath, const WIN32_FIND_DATAW& findFileData, const HANDLE& fileHandle)
-    :m_dirPath(Utf8ToUtf16(dirPath)), m_findFileData(findFileData), m_fileHandle(fileHandle) {}
+OpenDirEntry::OpenDirEntry(
+    const std::string&      dirPath,
+    const WIN32_FIND_DATAW& findFileData,
+    const HANDLE&           fileHandle)
+    : m_dirPath(Utf8ToUtf16(dirPath)), m_findFileData(findFileData), m_fileHandle(fileHandle) {}
 
 bool OpenDirEntry::IsArchive() const { return (m_findFileData.dwFileAttributes & FILE_ATTRIBUTE_ARCHIVE) != 0; }
 bool OpenDirEntry::IsCompressed() const { return (m_findFileData.dwFileAttributes & FILE_ATTRIBUTE_COMPRESSED) != 0; }
