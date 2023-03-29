@@ -460,10 +460,6 @@ std::optional<std::wstring> StatResult::SymbolicLinkTargetPathW() const
     wTarget.assign(targetName, targetName + targetNameLength);
     wPrintName.assign(displayName, displayName + displayNameLength);
 
-    std::wcout << L"target: " << wTarget << std::endl;
-    std::wcout << L"printName: " << wPrintName << std::endl;
-    std::wcout << L"flags: " << pReparseBuffer->SymbolicLinkReparseBuffer.Flags << std::endl;
-
     ::free(pReparseBuffer);
     return std::make_optional<std::wstring>(wPrintName);
 }
@@ -589,10 +585,6 @@ std::optional<StatResult> StatW(const std::wstring& wPath)
         return std::nullopt;
     }
     ::CloseHandle(hFile);
-    DWORD attribute = ::GetFileAttributesW(unicodePath.c_str()); /* to detect REPARSE_POINT flag */
-    if (attribute != INVALID_FILE_ATTRIBUTES) {
-        handleFileInformation.dwFileAttributes = attribute;
-    }
     return std::make_optional<StatResult>(wPath, handleFileInformation);
 }
 #endif
@@ -842,7 +834,7 @@ SparseRangeResult QuerySparseWin32AllocateRangesW(const std::wstring& wPath)
     HANDLE hFile = ::CreateFileW(
                         unicodePath.c_str(),
                         GENERIC_READ,
-                        0,
+                        FILE_SHARE_READ,
                         nullptr,
                         OPEN_EXISTING,
                         FILE_ATTRIBUTE_NORMAL,
@@ -882,7 +874,7 @@ SparseRangeResult QuerySparseWin32AllocateRangesW(const std::wstring& wPath)
         /* Calculate the number of records returned */
         DWORD dwAllocRangeCount = nbytes / sizeof(FILE_ALLOCATED_RANGE_BUFFER);
         /* Print each allocated range */
-        for (int i = 0; i < dwAllocRangeCount; i++) {
+        for (DWORD i = 0; i < dwAllocRangeCount; i++) {
             ranges.emplace_back(allocRanges[i].FileOffset.QuadPart, allocRanges[i].Length.QuadPart);
         }
         // Set starting address and size for the next query
@@ -954,10 +946,10 @@ bool CopySparseFileWin32W(const std::wstring& wSrcPath, const std::wstring& wDst
         uint64_t len = range.second;
         sizeEx.QuadPart = offset;
         do {
-            int nbytes = 0; /* n bytes to copy in this batch */
+            DWORD nbytes = 0; /* n bytes to copy in this batch */
             ::SetFilePointerEx(hInFile, sizeEx, nullptr, FILE_BEGIN); /* set fd to the beginning of the range */
             ::SetFilePointerEx(hOutFile, sizeEx, nullptr, FILE_BEGIN);
-            nbytes = len < sizeof(buff) ? len: sizeof(buff); /* if the range can be copied in this batch */
+            nbytes = len < sizeof(buff) ? static_cast<DWORD>(len): sizeof(buff); /* if the range can be copied in this batch */
             if (!::ReadFile(hInFile, buff, nbytes, nullptr, nullptr)) {
                 /* read failed */
                 ::CloseHandle(hInFile);
@@ -1244,20 +1236,15 @@ std::optional<std::wstring> GetSecurityDescriptorW(const std::wstring& wPath)
     DWORD result = 0;
     LPWSTR wSddlStr = nullptr;
     std::wstring wPathUnicode = ConvertWin32UnicodePath(wPath);
-    try
-    {
-        result = ::GetNamedSecurityInfoW(
-            wPathUnicode.c_str(),
-            SE_FILE_OBJECT,
-            DACL_SECURITY_INFORMATION,
-            NULL,
-            NULL,
-            &dAcl,
-            NULL,
-            &psd);
-    } catch (const std::exception& e) {
-        return std::nullopt;
-    }
+    result = ::GetNamedSecurityInfoW(
+        wPathUnicode.c_str(),
+        SE_FILE_OBJECT,
+        DACL_SECURITY_INFORMATION,
+        NULL,
+        NULL,
+        &dAcl,
+        NULL,
+        &psd);
     if (result != ERROR_SUCCESS) {
         return std::nullopt;
     }
@@ -1293,20 +1280,15 @@ std::optional<std::wstring> GetDACLW(const std::wstring& wPath)
     DWORD result = 0;
     LPWSTR wSddlStr = nullptr;
     std::wstring wPathUnicode = ConvertWin32UnicodePath(wPath);
-    try
-    {
-        result = ::GetNamedSecurityInfoW(
-            wPathUnicode.c_str(),
-            SE_FILE_OBJECT,
-            DACL_SECURITY_INFORMATION,
-            NULL,
-            NULL,
-            &dAcl,
-            NULL,
-            &psd);
-    } catch (const std::exception& e) {
-        return std::nullopt;
-    }
+    result = ::GetNamedSecurityInfoW(
+        wPathUnicode.c_str(),
+        SE_FILE_OBJECT,
+        DACL_SECURITY_INFORMATION,
+        NULL,
+        NULL,
+        &dAcl,
+        NULL,
+        &psd);
     if (result != ERROR_SUCCESS) {
         return std::nullopt;
     }
@@ -1342,21 +1324,15 @@ std::optional<std::wstring> GetSACLW(const std::wstring& wPath)
     DWORD result = 0;
     LPWSTR wSddlStr = nullptr;
     std::wstring wPathUnicode = ConvertWin32UnicodePath(wPath);
-    try
-    {
-        result = ::GetNamedSecurityInfoW(
-            wPathUnicode.c_str(),
-            SE_FILE_OBJECT,
-            SACL_SECURITY_INFORMATION,
-            NULL,
-            NULL,
-            &dAcl,
-            NULL,
-            &psd);
-    }
-    catch (const std::exception& e) {
-        return std::nullopt;
-    }
+    result = ::GetNamedSecurityInfoW(
+        wPathUnicode.c_str(),
+        SE_FILE_OBJECT,
+        SACL_SECURITY_INFORMATION,
+        NULL,
+        NULL,
+        &dAcl,
+        NULL,
+        &psd);
     if (result != ERROR_SUCCESS) {
         return std::nullopt;
     }
@@ -1444,10 +1420,10 @@ std::optional<AlternateDataStreamEntry> OpenAlternateDataStreamW(const std::wstr
     HANDLE hFile = ::CreateFileW(
         wPathUnicode.c_str(),
         GENERIC_READ,
-        0,
+        FILE_SHARE_READ,
         nullptr,
         OPEN_EXISTING,
-		FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_POSIX_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT,
+		FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT,
         nullptr 
     );
     if (hFile == INVALID_HANDLE_VALUE) {
@@ -1478,6 +1454,7 @@ AlternateDataStreamEntry::AlternateDataStreamEntry(HANDLE hFile)
 std::optional<std::wstring> AlternateDataStreamEntry::NextStreamNameW()
 {
     if (m_hFile == INVALID_HANDLE_VALUE || m_hFile == nullptr) {
+        std::cout << "failed 0" << std::endl;
         return std::nullopt;
     }
 	WIN32_STREAM_ID& wsi = *((WIN32_STREAM_ID*)m_buff);
@@ -1486,11 +1463,13 @@ std::optional<std::wstring> AlternateDataStreamEntry::NextStreamNameW()
 		/* we are at the start of a stream header. read it */
 		if (!::BackupRead(m_hFile, m_buff, 20, &m_numReaded, FALSE, TRUE, &m_context)) {
             /* read backup data failed */
+            std::cout << "failed 1" << std::endl;
             CloseRead();
 			return std::nullopt;
         }
 		if (m_numReaded == 0) {
             /* read completed */
+            std::cout << "failed ??" << std::endl;
             CloseRead();
 			return std::nullopt;
         }
@@ -1498,10 +1477,12 @@ std::optional<std::wstring> AlternateDataStreamEntry::NextStreamNameW()
 		{
 			if (!::BackupRead(m_hFile, m_buff + 20, wsi.dwStreamNameSize, &m_numReaded, FALSE, TRUE, &m_context)) {
                 /* read backup data failed */
+                 std::cout << "failed 2" << std::endl;
                 CloseRead();
 				return std::nullopt;
             }
 			if (m_numReaded != wsi.dwStreamNameSize) {
+                std::cout << "failed 3" << std::endl;
                 CloseRead();
 				return std::nullopt;
             }

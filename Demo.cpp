@@ -164,6 +164,7 @@ int DoStatCommand(const std::string& path)
     std::optional<AlternateDataStreamEntry> adsEntry = OpenAlternateDataStreamW(Utf8ToUtf16(path));
     if (!adsEntry) {
         std::cout << "open ADS stream failed, error: " << ErrorMessage() << std::endl;
+        return -1;
     }
     std::optional<std::wstring> wStreamName;
     int adsIndex = 0;
