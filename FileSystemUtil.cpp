@@ -1412,117 +1412,47 @@ bool CreateJunctionPointW(const std::wstring& wSrcPath, const std::wstring& wTar
 /* ADS releated API */
 std::optional<AlternateDataStreamEntry> OpenAlternateDataStreamW(const std::wstring& wPath)
 {
-    if (!EnablePrivilege()) {
-        /* enable privilege failed */
-        return std::nullopt;
-    }
     std::wstring wPathUnicode = ConvertWin32UnicodePath(wPath);
-    HANDLE hFile = ::CreateFileW(
+    LPVOID  lpFindStreamData = nullptr;
+    HANDLE hStream = ::FindFirstStreamW(
         wPathUnicode.c_str(),
-        GENERIC_READ,
-        FILE_SHARE_READ,
-        nullptr,
-        OPEN_EXISTING,
-		FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT,
-        nullptr 
+        _STREAM_INFO_LEVELS::FindStreamInfoStandard,
+        lpFindStreamData,
+        0
     );
-    if (hFile == INVALID_HANDLE_VALUE) {
-        /* failed to obtain file handle */
+    if (hStream == INVALID_HANDLE_VALUE) {
+        /* get stream handle failed */
         return std::nullopt;
     }
-    return std::make_optional<AlternateDataStreamEntry>(hFile);
+    return std::make_optional<AlternateDataStreamEntry>(hStream, lpFindStreamData);
 }
 
-bool IsAlternateDataStreamW(const std::wstring& wPath)
+AlternateDataStreamEntry::AlternateDataStreamEntry(HANDLE hStream, LPVOID lpFindStreamData)
+ : m_hStream(hStream), m_lpFindStreamData(lpFindStreamData), m_eof(false) {}
+
+std::wstring AlternateDataStreamEntry::StreamNameW()
 {
-    std::optional<AlternateDataStreamEntry> adsEntry = OpenAlternateDataStreamW(wPath);
-    std::optional<std::wstring> wStreamName;
-    if (adsEntry->NextStreamNameW()) {
+    return static_cast<WIN32_FIND_STREAM_DATA*>(m_lpFindStreamData)->cStreamName;
+}
+
+bool AlternateDataStreamEntry::Next()
+{
+    if (::FindNextStreamW(m_hStream, m_lpFindStreamData)) {
         return true;
+    }
+    if (::GetLastError() == ERROR_HANDLE_EOF) {
+        /* read succeed and reached EOF */
+        m_eof = true;
     }
     return false;
 }
 
-AlternateDataStreamEntry::AlternateDataStreamEntry(HANDLE hFile)
-{
-    m_hFile = hFile;
-    m_numReaded = 0;
-    m_numToSkip = 0;
-	m_context = nullptr;
-}
-
-std::optional<std::wstring> AlternateDataStreamEntry::NextStreamNameW()
-{
-    if (m_hFile == INVALID_HANDLE_VALUE || m_hFile == nullptr) {
-        std::cout << "failed 0" << std::endl;
-        return std::nullopt;
-    }
-	WIN32_STREAM_ID& wsi = *((WIN32_STREAM_ID*)m_buff);
-    std::wstring wStreamName;
-	while (wStreamName.empty()) {
-		/* we are at the start of a stream header. read it */
-		if (!::BackupRead(m_hFile, m_buff, 20, &m_numReaded, FALSE, TRUE, &m_context)) {
-            /* read backup data failed */
-            std::cout << "failed 1" << std::endl;
-            CloseRead();
-			return std::nullopt;
-        }
-		if (m_numReaded == 0) {
-            /* read completed */
-            std::cout << "failed ??" << std::endl;
-            CloseRead();
-			return std::nullopt;
-        }
-		if (wsi.dwStreamNameSize > 0)
-		{
-			if (!::BackupRead(m_hFile, m_buff + 20, wsi.dwStreamNameSize, &m_numReaded, FALSE, TRUE, &m_context)) {
-                /* read backup data failed */
-                 std::cout << "failed 2" << std::endl;
-                CloseRead();
-				return std::nullopt;
-            }
-			if (m_numReaded != wsi.dwStreamNameSize) {
-                std::cout << "failed 3" << std::endl;
-                CloseRead();
-				return std::nullopt;
-            }
-		}
-        /* check wsi struct and pick whose dwStreamId is BACKUP_ALTERNATE_DATA */
-        if (wsi.dwStreamId == BACKUP_ALTERNATE_DATA && wsi.dwStreamNameSize != 0) {
-            wStreamName = wsi.cStreamName;
-        }
-		/* skip stream data */
-		if (wsi.Size.QuadPart > 0) {
-			DWORD lo, hi;
-			::BackupSeek(m_hFile, 0xffffffffL, 0x7fffffffL, &lo, &hi, &m_context);
-		}
-        if (!wStreamName.empty()) {
-            break;
-        }
-	}
-    if (!wStreamName.empty()) {
-        return std::make_optional<std::wstring>(wStreamName);
-    }
-    return std::nullopt;
-}
-
-
-void AlternateDataStreamEntry::CloseRead()
-{
-    /* make NT release the context */
-    ::BackupRead(m_hFile, m_buff, 0, &m_numReaded, TRUE, FALSE, &m_context);
-	::CloseHandle(m_hFile);
-    m_hFile = INVALID_HANDLE_VALUE;
-    m_context = nullptr;
-}
-
 AlternateDataStreamEntry::~AlternateDataStreamEntry()
 {
-    if (m_hFile != INVALID_HANDLE_VALUE || m_hFile != nullptr) {
-        ::CloseHandle(m_hFile);
+    if (m_hStream != INVALID_HANDLE_VALUE || m_hStream != nullptr) {
+        ::FindClose(m_hStream);
     }
-    m_hFile = INVALID_HANDLE_VALUE;
-    m_context = nullptr;
+    m_hStream = INVALID_HANDLE_VALUE;
 }
 
 #endif

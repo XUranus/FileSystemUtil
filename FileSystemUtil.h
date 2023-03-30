@@ -303,23 +303,19 @@ const int WIN32_STREAM_ID_BUFFER_LENGTH_MAX = 4096;
 
 class AlternateDataStreamEntry {
 public:
-    AlternateDataStreamEntry(HANDLE hFile);
-    std::optional<std::wstring> NextStreamNameW();
+    AlternateDataStreamEntry(HANDLE hFile, LPVOID lpFindStreamData);
+    std::wstring StreamNameW();
+    bool Next();
     ~AlternateDataStreamEntry();
 
 private:
-    void CloseRead();
-private:
-    HANDLE m_hFile;
-    DWORD m_numReaded = 0;
-    DWORD m_numToSkip = 0;
-	void* m_context = nullptr;
-    unsigned char m_buff[WIN32_STREAM_ID_BUFFER_LENGTH_MAX];
+    HANDLE m_hStream = INVALID_HANDLE_VALUE;
+    LPVOID m_lpFindStreamData = INVALID_HANDLE_VALUE;
+    bool m_eof = false;
 };
 
 /* ADS releated API */
 std::optional<AlternateDataStreamEntry> OpenAlternateDataStreamW(const std::wstring& wPath);
-bool IsAlternateDataStreamW(const std::wstring& path);
 #endif
 
 /* Common cross-platform API */

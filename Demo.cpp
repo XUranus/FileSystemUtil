@@ -166,11 +166,11 @@ int DoStatCommand(const std::string& path)
         std::cout << "open ADS stream failed, error: " << ErrorMessage() << std::endl;
         return -1;
     }
-    std::optional<std::wstring> wStreamName;
     int adsIndex = 0;
-    while (wStreamName = adsEntry->NextStreamNameW()) {
-        std::wcout << L"ADS[" << adsIndex << L"] " << wStreamName.value() << std::endl;
-    }
+    do {
+        std::wstring wStreamName = adsEntry->StreamNameW();
+        std::wcout << L"ADS[" << adsIndex << L"] " << wStreamName << std::endl;
+    } while (adsEntry->Next());
 #endif
 #ifdef __linux__
     std::cout << "Mode: \t\t" << statResult->Mode() << std::endl;
