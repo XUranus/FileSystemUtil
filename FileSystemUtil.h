@@ -303,14 +303,14 @@ const int WIN32_STREAM_ID_BUFFER_LENGTH_MAX = 4096;
 
 class AlternateDataStreamEntry {
 public:
-    AlternateDataStreamEntry(HANDLE hFile, LPVOID lpFindStreamData);
+    AlternateDataStreamEntry(HANDLE hFile, WIN32_FIND_STREAM_DATA lpFindStreamData);
     std::wstring StreamNameW();
     bool Next();
     ~AlternateDataStreamEntry();
 
 private:
     HANDLE m_hStream = INVALID_HANDLE_VALUE;
-    LPVOID m_lpFindStreamData = INVALID_HANDLE_VALUE;
+    WIN32_FIND_STREAM_DATA m_findStreamData;
     bool m_eof = false;
 };
 

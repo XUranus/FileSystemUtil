@@ -1412,32 +1412,32 @@ bool CreateJunctionPointW(const std::wstring& wSrcPath, const std::wstring& wTar
 /* ADS releated API */
 std::optional<AlternateDataStreamEntry> OpenAlternateDataStreamW(const std::wstring& wPath)
 {
-    std::wstring wPathUnicode = ConvertWin32UnicodePath(wPath);
-    LPVOID  lpFindStreamData = nullptr;
+    std::wstring wPathUnicode = ConvertWin32UnicodePath(wPath); 
+    WIN32_FIND_STREAM_DATA findStreamData{};
     HANDLE hStream = ::FindFirstStreamW(
         wPathUnicode.c_str(),
         _STREAM_INFO_LEVELS::FindStreamInfoStandard,
-        lpFindStreamData,
+        &findStreamData,
         0
     );
     if (hStream == INVALID_HANDLE_VALUE) {
         /* get stream handle failed */
         return std::nullopt;
     }
-    return std::make_optional<AlternateDataStreamEntry>(hStream, lpFindStreamData);
+    return std::make_optional<AlternateDataStreamEntry>(hStream, findStreamData);
 }
 
-AlternateDataStreamEntry::AlternateDataStreamEntry(HANDLE hStream, LPVOID lpFindStreamData)
- : m_hStream(hStream), m_lpFindStreamData(lpFindStreamData), m_eof(false) {}
+AlternateDataStreamEntry::AlternateDataStreamEntry(HANDLE hStream, WIN32_FIND_STREAM_DATA findStreamData)
+ : m_hStream(hStream), m_findStreamData(findStreamData), m_eof(false) {}
 
 std::wstring AlternateDataStreamEntry::StreamNameW()
 {
-    return static_cast<WIN32_FIND_STREAM_DATA*>(m_lpFindStreamData)->cStreamName;
+    return m_findStreamData.cStreamName;
 }
 
 bool AlternateDataStreamEntry::Next()
 {
-    if (::FindNextStreamW(m_hStream, m_lpFindStreamData)) {
+    if (::FindNextStreamW(m_hStream, &m_findStreamData)) {
         return true;
     }
     if (::GetLastError() == ERROR_HANDLE_EOF) {
