@@ -9,6 +9,8 @@
 #include <codecvt>
 #include <sddl.h>
 #include <winioctl.h>
+
+#pragma comment(lib, "mpr.lib") /* required by network volume API */
 #endif
 
 #ifdef __linux__
@@ -1195,7 +1197,7 @@ std::optional<std::vector<std::string>> Win32VolumesDetail::GetVolumePathList()
     return std::make_optional<std::vector<std::string>>(pathList);
 }
 
-std::optional<std::vector<Win32VolumesDetail>> GetWin32VolumeList()
+std::optional<std::vector<Win32VolumesDetail>> GetWin32LocalVolumeList()
 {
     std::vector<std::wstring> wVolumes;
     std::vector<Win32VolumesDetail> volumeDetails;
@@ -1203,6 +1205,7 @@ std::optional<std::vector<Win32VolumesDetail>> GetWin32VolumeList()
     HANDLE handle = ::FindFirstVolumeW(wVolumeNameBuffer, VOLUME_BUFFER_MAX_LEN);
     if (handle == INVALID_HANDLE_VALUE) {
         ::FindVolumeClose(handle);
+        /* find failed */
         return std::nullopt;
     }
     wVolumes.push_back(std::wstring(wVolumeNameBuffer));
@@ -1216,6 +1219,66 @@ std::optional<std::vector<Win32VolumesDetail>> GetWin32VolumeList()
         volumeDetails.push_back(volumeDetail);
     }
     return volumeDetails;
+}
+
+std::optional<std::vector<Win32VolumesDetail>> GetWin32NetworkVolumeList()
+{
+    std::vector<Win32VolumesDetail> networkVolumes;
+
+    DWORD dwResult;
+    DWORD dwSize = 0;
+    LPNETRESOURCE lpnr = NULL;
+    HANDLE hEnum = NULL;
+    DWORD dwCount = 0;
+    DWORD i;
+
+    dwResult = ::WNetOpenEnum(RESOURCE_CONNECTED, RESOURCETYPE_DISK, 0, lpnr, &hEnum);
+    if (dwResult != NO_ERROR) {
+        /* WNetOpenEnum failed with error dwResult */
+        return std::nullopt;
+    }
+
+    do
+    {
+        dwSize = 16384; 
+        lpnr = (LPNETRESOURCE)::GlobalAlloc(GPTR, dwSize);
+        if (lpnr == NULL) {
+            std::cout << "Memory allocation error." << std::endl;
+            return std::nullopt;
+        }
+        dwResult = ::WNetEnumResource(hEnum, &dwCount, lpnr, &dwSize);
+        if (dwResult == NO_ERROR) {
+            for (i = 0; i < dwCount; i++) {
+                if (lpnr[i].dwDisplayType == RESOURCEDISPLAYTYPE_SHARE) {
+                    std::wstring wstr(lpnr[i].lpRemoteName);
+                    std::wcout << wstr << std::endl;
+                }
+            }
+        }
+        ::GlobalFree((HGLOBAL)lpnr);
+        if (dwResult != ERROR_NO_MORE_ITEMS) {
+            /* WNetEnumResource failed with error dwResult */
+            return std::nullopt;
+        }
+    } while (dwResult != ERROR_NO_MORE_ITEMS);
+
+    ::WNetCloseEnum(hEnum);
+    return networkVolumes;
+}
+
+
+std::optional<std::vector<Win32VolumesDetail>> GetWin32VolumeList()
+{
+    std::vector<Win32VolumesDetail> res;
+    std::optional<std::vector<Win32VolumesDetail>> localVolumes = GetWin32LocalVolumeList();
+    std::optional<std::vector<Win32VolumesDetail>> netVolumes = GetWin32LocalVolumeList();
+    if (localVolumes) {
+        std::copy(localVolumes->begin(), localVolumes->end(), std::back_inserter(res));
+    }
+    if (netVolumes) {
+        std::copy(netVolumes->begin(), netVolumes->end(), std::back_inserter(res));
+    }
+    return res;
 }
 
 /* Win32 Security Descriptor related API */

@@ -320,6 +320,7 @@ void ListWin32Volumes()
     std::optional<std::vector<Win32VolumesDetail>> wVolumes = GetWin32VolumeList();
     if (!wVolumes) {
         std::wcout << L"failed to list volumes, error: " << Utf8ToUtf16(ErrorMessage()) << std::endl;
+        return;
     }
     for (Win32VolumesDetail& volumeDetail: wVolumes.value()) {
         std::wcout << L"Name: \t\t" << volumeDetail.VolumeNameW() << std::endl;
