@@ -163,13 +163,21 @@ int DoStatCommand(const std::string& path)
     /* check ADS file */
     std::optional<AlternateDataStreamEntry> adsEntry = OpenAlternateDataStreamW(Utf8ToUtf16(path));
     if (!adsEntry) {
-        std::cout << "open ADS stream failed, error: " << ErrorMessage() << std::endl;
-        return -1;
+        if (::GetLastError() != ERROR_HANDLE_EOF) {
+            std::cout << "open ADS stream failed, error: " << ErrorMessage() << std::endl;
+            return -1;
+        } else {
+            /* no other data stream */
+            return 0;
+        }
     }
-    int adsIndex = 0;
+    int adsIndex = 1;
     do {
         std::wstring wStreamName = adsEntry->StreamNameW();
-        std::wcout << L"ADS[" << adsIndex << L"] " << wStreamName << std::endl;
+        if (wStreamName == L"::$DATA") {
+            continue; // skip main data stream
+        }
+        std::wcout << L"Stream[" << adsIndex++ << L"] " << wStreamName << std::endl;
     } while (adsEntry->Next());
 #endif
 #ifdef __linux__

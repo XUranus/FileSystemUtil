@@ -1498,15 +1498,30 @@ std::wstring AlternateDataStreamEntry::StreamNameW()
     return m_findStreamData.cStreamName;
 }
 
+bool AlternateDataStreamEntry::Eof() const
+{
+    return m_eof;
+}
+
+DWORD AlternateDataStreamEntry::Error() const
+{
+    return m_error;
+}
+
 bool AlternateDataStreamEntry::Next()
 {
+    if (m_hStream == INVALID_HANDLE_VALUE) {
+        return false;
+    }
     if (::FindNextStreamW(m_hStream, &m_findStreamData)) {
         return true;
     }
-    if (::GetLastError() == ERROR_HANDLE_EOF) {
+    m_error = ::GetLastError();
+    if (m_error == ERROR_HANDLE_EOF) {
         /* read succeed and reached EOF */
         m_eof = true;
     }
+    m_hStream = INVALID_HANDLE_VALUE;
     return false;
 }
 

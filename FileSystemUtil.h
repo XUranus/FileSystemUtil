@@ -308,11 +308,14 @@ public:
     AlternateDataStreamEntry(HANDLE hFile, WIN32_FIND_STREAM_DATA lpFindStreamData);
     std::wstring StreamNameW();
     bool Next();
+    DWORD Error() const;
+    bool Eof() const;
     ~AlternateDataStreamEntry();
 
 private:
     HANDLE m_hStream = INVALID_HANDLE_VALUE;
     WIN32_FIND_STREAM_DATA m_findStreamData;
+    DWORD m_error = 0;
     bool m_eof = false;
 };
 
