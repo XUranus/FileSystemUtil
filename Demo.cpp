@@ -12,33 +12,23 @@
 
 using namespace FileSystemUtil;
 
-std::wstring GetLastErrorAsStringW(DWORD errorMessageID)
+static std::wstring GetLastErrorAsStringW(DWORD errorID)
 {
-    if (errorMessageID == 0) {
-        return std::wstring(); /* No error message has been recorded */
-    }
-    
-    LPWSTR messageBuffer = nullptr;
-    /* Ask Win32 to give us the string version of that message ID.
-     * The parameters we pass in, tell Win32 to create the buffer that holds the message for us
-     * (because we don't yet know how long the message string will be).
-     */
-    size_t size = ::FormatMessageW(
+    LPWSTR buffer = nullptr;
+
+    DWORD length = ::FormatMessageW(
         FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
         nullptr,
-        errorMessageID,
+        errorID,
         MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-        (LPWSTR)&messageBuffer,
+        (LPWSTR)&buffer,
         0,
         nullptr);
-    
-    /* Copy the error message into a std::string */
-    std::wstring wMessage(messageBuffer, size);
 
-    /* Free the Win32's string's buffe */
-    ::LocalFree(messageBuffer);      
-    
-    return wMessage;
+    std::wstring errorMessage(buffer, length);
+    ::LocalFree(buffer);
+
+    return errorMessage;
 }
 
 static std::string ErrorMessage()
@@ -299,19 +289,14 @@ int DoCopySparseCommand(const std::string& srcPath, const std::string& dstPath)
 #ifdef WIN32
 int DoGetSecurityDescriptorWCommand(const std::wstring& wPath)
 {
-    std::optional<std::wstring> wDacl = GetDACLW(wPath);
-    if (wDacl) {
-        std::wcout << "DACL:\n" << wDacl.value() << std::endl;
-    }
-    std::optional<std::wstring> wSacl = GetSACLW(wPath);
-    if (wSacl) {
-        std::wcout << L"SACL:\n" << wSacl.value() << std::endl;
-    }
-    std::optional<std::wstring> wSd = GetSecurityDescriptorW(wPath);
+    DWORD retCode = 0;
+    std::optional<std::wstring> wSd = GetSecurityDescriptorW(wPath, retCode);
     if (wSd) {
         std::wcout << L"SecurityDescriptor:\n" << wSd.value() << std::endl;
+        return 0;
     }
-    return 0;
+    std::wcout << L"error: " << retCode << std::endl;
+    return -1;
 }
 
 void ListWin32Drivers()

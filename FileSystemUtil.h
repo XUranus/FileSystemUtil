@@ -275,12 +275,10 @@ std::optional<std::vector<Win32VolumesDetail>> GetNetworkVolumeList();
 std::optional<std::vector<Win32VolumesDetail>> GetWin32VolumeList();
 
 /* Win32 Security Descriptor related API */
-std::optional<std::wstring> GetSecurityDescriptorW(const std::wstring& wPath);
-std::optional<std::string> GetSecurityDescriptor(const std::string& path);
-std::optional<std::wstring> GetDACLW(const std::wstring& wPath);
-std::optional<std::string> GetDACL(const std::string& path);
-std::optional<std::wstring> GetSACLW(const std::wstring& wPath);
-std::optional<std::string> GetSACL(const std::string& path);
+std::optional<std::wstring> GetSecurityDescriptorW(const std::wstring& wPath, DWORD& retCode);
+std::optional<std::string> GetSecurityDescriptor(const std::string& path, DWORD& retCode);
+bool SetSecurityDescriptorW(const std::wstring& wPath, const std::wstring& wSddlStr);
+bool SetSecurityDescriptor(const std::string& path, const std::string& sddlStr);
 
 /*
  * Normalize windows path, convert the path to the form like C:\Dir1\Dir2

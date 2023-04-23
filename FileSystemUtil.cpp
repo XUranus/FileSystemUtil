@@ -99,7 +99,7 @@ inline std::wstring ConvertWin32UnicodePath(const std::wstring& wPath)
     return WPATH_PREFIX + wPath;
 }
 
-bool EnablePrivilege()
+static bool EnablePrivilege(const wchar_t* privilegeName)
 {
     HANDLE hToken;
     char buf[sizeof(TOKEN_PRIVILEGES) * 2];
@@ -115,7 +115,7 @@ bool EnablePrivilege()
     /* enable SeBackupPrivilege, SeRestorePrivilege */
     if (!::LookupPrivilegeValue(
             nullptr,
-            SE_BACKUP_NAME,
+            privilegeName,
             &tkp.Privileges[0].Luid)) { 
         return false;
     }
@@ -1292,33 +1292,43 @@ std::optional<std::vector<Win32VolumesDetail>> GetWin32VolumeList()
 * https://blog.csdn.net/eggfly178/article/details/41773601
 * https://learn.microsoft.com/en-us/windows/win32/secauthz/security-descriptor-string-format
 */
-std::optional<std::wstring> GetSecurityDescriptorW(const std::wstring& wPath)
+std::optional<std::wstring> GetSecurityDescriptorW(const std::wstring& wPath, DWORD& retCode)
 {
-    PACL dAcl = nullptr;
-    PSECURITY_DESCRIPTOR psd = nullptr;
-    DWORD result = 0;
+    PSECURITY_DESCRIPTOR pSecurityDescriptor = nullptr;
+    PACL pDacl      = nullptr;
+    PACL pSacl      = nullptr;
+    PSID psidOwner  = nullptr;
+    PSID psidGroup  = nullptr;
     LPWSTR wSddlStr = nullptr;
+    retCode = 0;
     std::wstring wPathUnicode = ConvertWin32UnicodePath(wPath);
-    result = ::GetNamedSecurityInfoW(
+    SECURITY_INFORMATION flags = DACL_SECURITY_INFORMATION | OWNER_SECURITY_INFORMATION | GROUP_SECURITY_INFORMATION;
+
+    // Get SACL need to enable privilege SE_SECURITY_NAME
+    if (!EnablePrivilege(SE_SECURITY_NAME)) {
+        flags |= SACL_SECURITY_INFORMATION;
+    }
+
+    DWORD result = ::GetNamedSecurityInfoW(
         wPathUnicode.c_str(),
         SE_FILE_OBJECT,
-        DACL_SECURITY_INFORMATION,
-        NULL,
-        NULL,
-        &dAcl,
-        NULL,
-        &psd);
+        flags,
+        &psidOwner,
+        &psidGroup,
+        &pDacl,
+        &pSacl,
+        &pSecurityDescriptor);
     if (result != ERROR_SUCCESS) {
+        retCode = result;
         return std::nullopt;
     }
     bool ret = ::ConvertSecurityDescriptorToStringSecurityDescriptorW(
-        psd,
+        pSecurityDescriptor,
         SDDL_REVISION_1,
         DACL_SECURITY_INFORMATION | SACL_SECURITY_INFORMATION | OWNER_SECURITY_INFORMATION | GROUP_SECURITY_INFORMATION,
         &wSddlStr,
         nullptr);
-    ::LocalFree(psd);
-    psd = nullptr;
+    ::LocalFree(pSecurityDescriptor);
     if (!ret) {
         return std::nullopt;
     }
@@ -1327,96 +1337,79 @@ std::optional<std::wstring> GetSecurityDescriptorW(const std::wstring& wPath)
     return std::make_optional<std::wstring>(res);
 }
 
-std::optional<std::string> GetSecurityDescriptor(const std::string& path)
+bool SetSecurityDescriptorW(const std::wstring& wPath, const std::wstring& wSddlStr)
 {
-    std::optional<std::wstring> result = GetSecurityDescriptorW(Utf8ToUtf16(path));
-    if (!result) {
-        return std::nullopt;
-    }
-    return std::make_optional<std::string>(Utf16ToUtf8(result.value()));
-}
-
-std::optional<std::wstring> GetDACLW(const std::wstring& wPath)
-{
-    PACL dAcl = nullptr;
-    PSECURITY_DESCRIPTOR psd = nullptr;
-    DWORD result = 0;
-    LPWSTR wSddlStr = nullptr;
+    PSECURITY_DESCRIPTOR pSecurityDescriptor = nullptr;
+    PACL pDacl      = nullptr;
+    PACL pSacl      = nullptr;
+    PSID psidOwner  = nullptr;
+    PSID psidGroup  = nullptr;
     std::wstring wPathUnicode = ConvertWin32UnicodePath(wPath);
-    result = ::GetNamedSecurityInfoW(
-        wPathUnicode.c_str(),
+    SECURITY_INFORMATION flags = DACL_SECURITY_INFORMATION | OWNER_SECURITY_INFORMATION | GROUP_SECURITY_INFORMATION;
+
+    /* Get SACL need to enable privilege SE_SECURITY_NAME */
+    if (!EnablePrivilege(SE_SECURITY_NAME)) {
+        flags |= SACL_SECURITY_INFORMATION;
+    }
+
+    /* convert sddlStr back to pSecurityDescriptor */
+    if (!::ConvertStringSecurityDescriptorToSecurityDescriptor(
+            wSddlStr.c_str(),
+            SDDL_REVISION_1,
+            &pSecurityDescriptor,
+            nullptr)) {
+        return false;
+    }
+
+    /* Get Owner from pSecurityDescriptor */
+    BOOL ownerDefaulted = false;
+    if (!::GetSecurityDescriptorOwner(pSecurityDescriptor, &psidOwner, &ownerDefaulted)) {
+        ::LocalFree(pSecurityDescriptor);
+        return false;
+    }
+
+    /* Get Group from pSecurityDescriptor */
+    BOOL groupDefaulted = false;
+    if (!::GetSecurityDescriptorGroup(pSecurityDescriptor, &psidGroup, &groupDefaulted)) {
+        ::LocalFree(pSecurityDescriptor);
+        return false;
+    }
+
+    /* Get DACL from pSecurityDescriptor */
+    BOOL bSaclPresent = false;
+    BOOL bSaclDefaulted = false;
+    if (!::GetSecurityDescriptorSacl(pSecurityDescriptor, &bSaclPresent, &pDacl, &bSaclDefaulted) || !bSaclPresent) {
+        ::LocalFree(pSecurityDescriptor);
+        return false;
+    }
+
+    // set pSecurityDescriptor to file
+    if (::SetNamedSecurityInfo(
+        const_cast<LPWSTR>(wPathUnicode.c_str()),
         SE_FILE_OBJECT,
-        DACL_SECURITY_INFORMATION,
-        NULL,
-        NULL,
-        &dAcl,
-        NULL,
-        &psd);
-    if (result != ERROR_SUCCESS) {
-        return std::nullopt;
+        flags,
+        psidOwner,
+        psidGroup,
+        pDacl,
+        pSacl) != ERROR_SUCCESS) {
+        ::LocalFree(pSecurityDescriptor);
+        return false;
     }
-    bool ret = ::ConvertSecurityDescriptorToStringSecurityDescriptorW(
-        psd,
-        SDDL_REVISION_1,
-        DACL_SECURITY_INFORMATION,
-        &wSddlStr,
-        nullptr);
-    ::LocalFree(psd);
-    psd = nullptr;
-    if (!ret) {
-        return std::nullopt;
+
+    if (pSecurityDescriptor) {
+        ::LocalFree(pSecurityDescriptor);
     }
-    std::wstring res(wSddlStr);
-    ::LocalFree(wSddlStr);
-    return std::make_optional<std::wstring>(res);
+    return true;
 }
 
-std::optional<std::string> GetDACL(const std::string& path)
+bool SetSecurityDescriptor(const std::string& path, const std::string& sddlStr)
 {
-    std::optional<std::wstring> result = GetDACLW(Utf8ToUtf16(path));
-    if (!result) {
-        return std::nullopt;
-    }
-    return std::make_optional<std::string>(Utf16ToUtf8(result.value()));
+    return SetSecurityDescriptorW(Utf8ToUtf16(path), Utf8ToUtf16(sddlStr));
 }
 
-std::optional<std::wstring> GetSACLW(const std::wstring& wPath)
+std::optional<std::string> GetSecurityDescriptor(const std::string& path, DWORD& retCode)
 {
-    PACL dAcl = nullptr;
-    PSECURITY_DESCRIPTOR psd = nullptr;
-    DWORD result = 0;
-    LPWSTR wSddlStr = nullptr;
-    std::wstring wPathUnicode = ConvertWin32UnicodePath(wPath);
-    result = ::GetNamedSecurityInfoW(
-        wPathUnicode.c_str(),
-        SE_FILE_OBJECT,
-        SACL_SECURITY_INFORMATION,
-        NULL,
-        NULL,
-        &dAcl,
-        NULL,
-        &psd);
-    if (result != ERROR_SUCCESS) {
-        return std::nullopt;
-    }
-    bool ret = ::ConvertSecurityDescriptorToStringSecurityDescriptorW(
-        psd,
-        SDDL_REVISION_1,
-        SACL_SECURITY_INFORMATION,
-        &wSddlStr,
-        nullptr);
-    ::LocalFree(psd);
-    psd = nullptr;
-    if (!ret) {
-        return std::nullopt;
-    }
-    std::wstring res(wSddlStr);
-    return std::make_optional<std::wstring>(res);
-}
-
-std::optional<std::string> GetSACL(const std::string& path)
-{
-    std::optional<std::wstring> result = GetSACLW(Utf8ToUtf16(path));
+    std::optional<std::wstring> result = GetSecurityDescriptorW(Utf8ToUtf16(path), retCode);
     if (!result) {
         return std::nullopt;
     }
