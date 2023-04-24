@@ -299,6 +299,23 @@ int DoGetSecurityDescriptorWCommand(const std::wstring& wPath)
     return -1;
 }
 
+int DoCopySecurityDescriptorWCommand(const std::wstring& wPathSrc, const std::wstring wPathTarget)
+{
+    DWORD retCode = 0;
+    std::optional<std::wstring> wSd = GetSecurityDescriptorW(wPathSrc, retCode);
+    std::wcout << wPathSrc << L" ==> " << wPathTarget << std::endl;
+    if (!wSd) {
+        std::wcerr << L"error: " << retCode << std::endl;
+        return -1;
+    }
+    std::wcout << L"SecurityDescriptor:\n" << wSd.value() << std::endl;
+    if (!SetSecurityDescriptorW(wPathTarget, wSd.value())) {
+        std::wcerr << L"error: " << retCode << std::endl;
+        return -1;
+    }
+    std::wcout << "Success" << std::endl;
+}
+
 void ListWin32Drivers()
 {
     std::vector<std::wstring> wDrivers = GetWin32DriverListW();
@@ -332,7 +349,6 @@ void ListWin32Volumes()
     return;
 }
 
-
 int DoMakeSymlinkCommand(const std::wstring& wLinkFilePath, const std::wstring& wTargetPath)
 {
     if (CreateSymbolicLinkW(wLinkFilePath, wTargetPath, true, true)) {
@@ -344,9 +360,18 @@ int DoMakeSymlinkCommand(const std::wstring& wLinkFilePath, const std::wstring& 
     }
 }
 
+void TryRequiringPrivilege()
+{
+    // Set ACL
+    if (!EnablePrivilegeW(SE_RESTORE_NAME)) {
+        std::cerr << "== Warning: Error enabling SeRestorePrivilege! == " << std::endl;
+    }
+}
+
 int wmain(int argc, WCHAR** argv)
 {
     ::SetConsoleOutputCP(65001); // forcing cmd to use UTF-8 output encoding
+    TryRequiringPrivilege();
     if (argc < 2) {
         PrintHelp();
         std::wcout << L"insufficient paramaters" << std::endl;
@@ -366,6 +391,8 @@ int wmain(int argc, WCHAR** argv)
             return DoCopySparseCommand(Utf16ToUtf8(std::wstring(argv[i + 1])), Utf16ToUtf8(std::wstring(argv[i + 2])));
         } else if (std::wstring(argv[i]) == L"-getsd" && i + 1 < argc) {
             return DoGetSecurityDescriptorWCommand(std::wstring(argv[i + 1]));
+        } else if (std::wstring(argv[i]) == L"-copysd" && i + 2 < argc) {
+            return DoCopySecurityDescriptorWCommand(std::wstring(argv[i + 1]), std::wstring(argv[i + 2]));
         } else if (std::wstring(argv[i]) == L"-mksymlink" && i + 2 < argc) {
             return DoMakeSymlinkCommand(std::wstring(argv[i + 1]), std::wstring(argv[i + 2]));
         } else if (std::wstring(argv[i]) == L"--drivers") {
