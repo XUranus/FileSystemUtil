@@ -106,7 +106,8 @@ void PrintHelp()
     std::cout << "fsutil -sparse <path> \t\t: query sparse file allocate ranges" << std::endl;
     std::cout << "fsutil -cpsparse <src> <dst> \t: copy sparse file" << std::endl;
 #ifdef WIN32
-    std::cout << "fsutil -getsd <path> \t\t: get file/directory security descriptor ACE" << std::endl;
+    std::cout << "fsutil -getsd <path> \t\t: list security descriptor string of win32 path" << std::endl;
+    std::cout << "fsutil -copysd <path> \t\t: copy security descriptor from src to target" << std::endl;
     std::cout << "fsutil -mksymlink <link> <target> \t\t: create symbolic link" << std::endl;
     std::cout << "fsutil --drivers \t\t: list drivers" << std::endl;
     std::cout << "fsutil --volumes \t\t: list volumes" << std::endl;
