@@ -277,10 +277,10 @@ std::optional<std::vector<Win32VolumesDetail>> GetWin32VolumeList();
 bool EnablePrivilegeW(const wchar_t* wPrivilegeName);
 
 /* Win32 Security Descriptor related API */
-std::optional<std::wstring> GetSecurityDescriptorW(const std::wstring& wPath, DWORD& retCode);
-std::optional<std::string> GetSecurityDescriptor(const std::string& path, DWORD& retCode);
-bool SetSecurityDescriptorW(const std::wstring& wPath, const std::wstring& wSddlStr);
-bool SetSecurityDescriptor(const std::string& path, const std::string& sddlStr);
+std::optional<std::wstring> GetSecurityDescriptorW(const std::wstring& wPath, DWORD& errCode);
+std::optional<std::string> GetSecurityDescriptor(const std::string& path, DWORD& errCode);
+bool SetSecurityDescriptorW(const std::wstring& wPath, const std::wstring& wSddlStr, DWORD& errCode);
+bool SetSecurityDescriptor(const std::string& path, const std::string& sddlStr, DWORD& errCode);
 
 /*
  * Normalize windows path, convert the path to the form like C:\Dir1\Dir2

@@ -1292,7 +1292,7 @@ std::optional<std::vector<Win32VolumesDetail>> GetWin32VolumeList()
 * https://blog.csdn.net/eggfly178/article/details/41773601
 * https://learn.microsoft.com/en-us/windows/win32/secauthz/security-descriptor-string-format
 */
-std::optional<std::wstring> GetSecurityDescriptorW(const std::wstring& wPath, DWORD& retCode)
+std::optional<std::wstring> GetSecurityDescriptorW(const std::wstring& wPath, DWORD& errCode)
 {
     PSECURITY_DESCRIPTOR pSecurityDescriptor = nullptr;
     PACL pDacl      = nullptr;
@@ -1300,7 +1300,7 @@ std::optional<std::wstring> GetSecurityDescriptorW(const std::wstring& wPath, DW
     PSID psidOwner  = nullptr;
     PSID psidGroup  = nullptr;
     LPWSTR wSddlStr = nullptr;
-    retCode = 0;
+    errCode = 0;
     std::wstring wPathUnicode = ConvertWin32UnicodePath(wPath);
 
     DWORD result = ::GetNamedSecurityInfoW(
@@ -1313,7 +1313,7 @@ std::optional<std::wstring> GetSecurityDescriptorW(const std::wstring& wPath, DW
         &pSacl,
         &pSecurityDescriptor);
     if (result != ERROR_SUCCESS) {
-        retCode = result;
+        errCode = result;
         return std::nullopt;
     }
     bool ret = ::ConvertSecurityDescriptorToStringSecurityDescriptorW(
@@ -1322,16 +1322,18 @@ std::optional<std::wstring> GetSecurityDescriptorW(const std::wstring& wPath, DW
         DACL_SECURITY_INFORMATION | SACL_SECURITY_INFORMATION | OWNER_SECURITY_INFORMATION | GROUP_SECURITY_INFORMATION,
         &wSddlStr,
         nullptr);
-    ::LocalFree(pSecurityDescriptor);
     if (!ret) {
+        errCode = ::GetLastError();
+        ::LocalFree(pSecurityDescriptor);
         return std::nullopt;
     }
+    ::LocalFree(pSecurityDescriptor);
     std::wstring res(wSddlStr);
     ::LocalFree(wSddlStr);
     return std::make_optional<std::wstring>(res);
 }
 
-bool SetSecurityDescriptorW(const std::wstring& wPath, const std::wstring& wSddlStr)
+bool SetSecurityDescriptorW(const std::wstring& wPath, const std::wstring& wSddlStr, DWORD& errCode)
 {
     PSECURITY_DESCRIPTOR pSecurityDescriptor = nullptr;
     PACL pDacl      = nullptr;
@@ -1346,12 +1348,14 @@ bool SetSecurityDescriptorW(const std::wstring& wPath, const std::wstring& wSddl
             SDDL_REVISION_1,
             &pSecurityDescriptor,
             nullptr)) {
+        errCode = ::GetLastError();
         return false;
     }
 
     /* Get Owner from pSecurityDescriptor */
     BOOL ownerDefaulted = false;
     if (!::GetSecurityDescriptorOwner(pSecurityDescriptor, &psidOwner, &ownerDefaulted)) {
+        errCode = ::GetLastError();
         ::LocalFree(pSecurityDescriptor);
         return false;
     }
@@ -1359,6 +1363,7 @@ bool SetSecurityDescriptorW(const std::wstring& wPath, const std::wstring& wSddl
     /* Get Group from pSecurityDescriptor */
     BOOL groupDefaulted = false;
     if (!::GetSecurityDescriptorGroup(pSecurityDescriptor, &psidGroup, &groupDefaulted)) {
+        errCode = ::GetLastError();
         ::LocalFree(pSecurityDescriptor);
         return false;
     }
@@ -1367,6 +1372,7 @@ bool SetSecurityDescriptorW(const std::wstring& wPath, const std::wstring& wSddl
     BOOL bDaclPresent = false;
     BOOL bDaclDefaulted = false;
     if (!::GetSecurityDescriptorDacl(pSecurityDescriptor, &bDaclPresent, &pDacl, &bDaclDefaulted) || !bDaclPresent) {
+        errCode = ::GetLastError();
         ::LocalFree(pSecurityDescriptor);
         return false;
     }
@@ -1375,19 +1381,36 @@ bool SetSecurityDescriptorW(const std::wstring& wPath, const std::wstring& wSddl
     BOOL bSaclPresent = false;
     BOOL bSaclDefaulted = false;
     if (!::GetSecurityDescriptorSacl(pSecurityDescriptor, &bSaclPresent, &pSacl, &bSaclDefaulted) || !bSaclPresent) {
+        errCode = ::GetLastError();
         ::LocalFree(pSecurityDescriptor);
         return false;
+    }
+
+    // some nullptr value fields with corresponding flag set may cause the SetNamedSecurityInfo call to fail
+    DWORD securityFlags = 0;
+    if (psidOwner != nullptr) {
+        securityFlags |= OWNER_SECURITY_INFORMATION;
+    }
+    if (psidGroup != nullptr) {
+        securityFlags |= GROUP_SECURITY_INFORMATION;
+    }
+    if (pDacl != nullptr) {
+        securityFlags |= DACL_SECURITY_INFORMATION;
+    }
+    if (pSacl != nullptr) {
+        securityFlags |= SACL_SECURITY_INFORMATION;
     }
 
     // set pSecurityDescriptor to file
     if (::SetNamedSecurityInfo(
         const_cast<LPWSTR>(wPathUnicode.c_str()),
         SE_FILE_OBJECT,
-        DACL_SECURITY_INFORMATION | SACL_SECURITY_INFORMATION | OWNER_SECURITY_INFORMATION | GROUP_SECURITY_INFORMATION,
+        securityFlags,
         psidOwner,
         psidGroup,
         pDacl,
         pSacl) != ERROR_SUCCESS) {
+        errCode = ::GetLastError();
         ::LocalFree(pSecurityDescriptor);
         return false;
     }
@@ -1395,17 +1418,18 @@ bool SetSecurityDescriptorW(const std::wstring& wPath, const std::wstring& wSddl
     if (pSecurityDescriptor) {
         ::LocalFree(pSecurityDescriptor);
     }
+    errCode = 0;
     return true;
 }
 
-bool SetSecurityDescriptor(const std::string& path, const std::string& sddlStr)
+bool SetSecurityDescriptor(const std::string& path, const std::string& sddlStr, DWORD& errCode)
 {
-    return SetSecurityDescriptorW(Utf8ToUtf16(path), Utf8ToUtf16(sddlStr));
+    return SetSecurityDescriptorW(Utf8ToUtf16(path), Utf8ToUtf16(sddlStr), errCode);
 }
 
-std::optional<std::string> GetSecurityDescriptor(const std::string& path, DWORD& retCode)
+std::optional<std::string> GetSecurityDescriptor(const std::string& path, DWORD& errCode)
 {
-    std::optional<std::wstring> result = GetSecurityDescriptorW(Utf8ToUtf16(path), retCode);
+    std::optional<std::wstring> result = GetSecurityDescriptorW(Utf8ToUtf16(path), errCode);
     if (!result) {
         return std::nullopt;
     }

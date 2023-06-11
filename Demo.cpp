@@ -306,12 +306,12 @@ int DoCopySecurityDescriptorWCommand(const std::wstring& wPathSrc, const std::ws
     std::optional<std::wstring> wSd = GetSecurityDescriptorW(wPathSrc, retCode);
     std::wcout << wPathSrc << L" ==> " << wPathTarget << std::endl;
     if (!wSd) {
-        std::wcerr << L"error: " << retCode << std::endl;
+        std::wcerr << L"get security descriptor failed, error: " << retCode << std::endl;
         return -1;
     }
     std::wcout << L"SecurityDescriptor:\n" << wSd.value() << std::endl;
-    if (!SetSecurityDescriptorW(wPathTarget, wSd.value())) {
-        std::wcerr << L"error: " << retCode << std::endl;
+    if (!SetSecurityDescriptorW(wPathTarget, wSd.value(), retCode)) {
+        std::wcerr << L"set security descriptor failed, error: " << retCode << std::endl;
         return -1;
     }
     std::wcout << "Success" << std::endl;
