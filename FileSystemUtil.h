@@ -6,6 +6,7 @@
 #include <iterator>
 #include <optional>
 #include <vector>
+#include <cstdint>
 
 #ifdef WIN32
 #define WIN32_LEAN_AND_MEAN

@@ -12,6 +12,7 @@
 
 using namespace FileSystemUtil;
 
+#ifdef WIN32
 static std::wstring GetLastErrorAsStringW(DWORD errorID)
 {
     LPWSTR buffer = nullptr;
@@ -30,6 +31,7 @@ static std::wstring GetLastErrorAsStringW(DWORD errorID)
 
     return errorMessage;
 }
+#endif
 
 static std::string ErrorMessage()
 {
@@ -37,7 +39,7 @@ static std::string ErrorMessage()
     return Utf16ToUtf8(GetLastErrorAsStringW(::GetLastError()));
 #endif
 #ifdef __linux__
-    return ""; // TODO:: errno to string
+    return std::string(strerror(errno)) + "(" + std::to_string(errno) + ")";
 #endif
 }
 
