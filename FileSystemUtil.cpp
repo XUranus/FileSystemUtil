@@ -1270,7 +1270,7 @@ std::optional<std::vector<Win32VolumesDetail>> GetWin32NetworkVolumeList()
 std::optional<std::vector<Win32VolumesDetail>> GetWin32VolumeList()
 {
     std::vector<Win32VolumesDetail> res;
-    std::optional<std::vector<Win32VolumesDetail>> localVolumes = GetWin32LocalVolumeList();
+    std::optional<std::vector<Win32VolumesDetail>> localVolumes {}; // TODO:: not support
     std::optional<std::vector<Win32VolumesDetail>> netVolumes = GetWin32LocalVolumeList();
     if (localVolumes) {
         std::copy(localVolumes->begin(), localVolumes->end(), std::back_inserter(res));
@@ -1479,7 +1479,7 @@ bool CreateSymbolicLinkW(
 
 bool CreateJunctionPointW(const std::wstring& wSrcPath, const std::wstring& wTargetPath)
 {
-    // TODO
+    // TODO:: not support 
     return CreateSymbolicLinkW(wSrcPath, wTargetPath, true, true);
     return false;
 }

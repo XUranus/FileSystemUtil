@@ -271,8 +271,6 @@ private:
     std::wstring m_wVolumeName;
 };
 
-std::optional<std::vector<Win32VolumesDetail>> GetWin32LocalList();
-std::optional<std::vector<Win32VolumesDetail>> GetNetworkVolumeList();
 std::optional<std::vector<Win32VolumesDetail>> GetWin32VolumeList();
 
 bool EnablePrivilegeW(const wchar_t* wPrivilegeName);
