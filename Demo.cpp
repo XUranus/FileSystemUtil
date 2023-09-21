@@ -4,7 +4,7 @@
 #include <chrono>
 #include <ctime>
 
-#ifdef WIN32
+#ifdef _WIN32
 #pragma execution_character_set("utf-8")
 #endif
 
@@ -12,7 +12,7 @@
 
 using namespace FileSystemUtil;
 
-#ifdef WIN32
+#ifdef _WIN32
 static std::wstring GetLastErrorAsStringW(DWORD errorID)
 {
     LPWSTR buffer = nullptr;
@@ -35,7 +35,7 @@ static std::wstring GetLastErrorAsStringW(DWORD errorID)
 
 static std::string ErrorMessage()
 {
-#ifdef WIN32
+#ifdef _WIN32
     return Utf16ToUtf8(GetLastErrorAsStringW(::GetLastError()));
 #endif
 #ifdef __linux__
@@ -57,7 +57,7 @@ static std::string TimestampSecondsToDate(uint64_t timestamp)
     return std::to_string(timestamp);
 }
 
-#ifdef WIN32
+#ifdef _WIN32
 std::string Win32FileAttributeFlagsToString(const StatResult& statResult)
 {
     std::string ret;
@@ -107,8 +107,8 @@ void PrintHelp()
     std::cout << "fsutil -mkdir <path> \t\t: create directory recursively" << std::endl;
     std::cout << "fsutil -sparse <path> \t\t: query sparse file allocate ranges" << std::endl;
     std::cout << "fsutil -cpsparse <src> <dst> \t: copy sparse file" << std::endl;
-#ifdef WIN32
-    std::cout << "fsutil -getsd <path> \t\t: list security descriptor string of win32 path" << std::endl;
+#ifdef _WIN32
+    std::cout << "fsutil -getsd <path> \t\t: list security descriptor string of _WIN32 path" << std::endl;
     std::cout << "fsutil -copysd <path> \t\t: copy security descriptor from src to target" << std::endl;
     std::cout << "fsutil -mksymlink <link> <target> \t\t: create symbolic link" << std::endl;
     std::cout << "fsutil --drivers \t\t: list drivers" << std::endl;
@@ -132,7 +132,7 @@ int DoStatCommand(const std::string& path)
     std::cout << "Atime: \t\t" << TimestampSecondsToDate(statResult->AccessTime())  << std::endl;
     std::cout << "CTime: \t\t" << TimestampSecondsToDate(statResult->CreationTime()) << std::endl;
     std::cout << "MTime: \t\t" << TimestampSecondsToDate(statResult->ModifyTime()) << std::endl;
-#ifdef WIN32
+#ifdef _WIN32
     std::cout << "Attr: \t\t" << statResult->Attribute() << std::endl;
     std::cout << "Flags: \t\t" << Win32FileAttributeFlagsToString(statResult.value()) << std::endl;
     if (statResult->IsReparsePoint()) {
@@ -185,7 +185,7 @@ int DoListCommand(const std::string& path)
     int total = 0;
     std::optional<OpenDirEntry> openDirEntry = OpenDir(path);
     if (!openDirEntry) {
-#ifdef WIN32
+#ifdef _WIN32
         std::cout << "open dir failed, error: " << ErrorMessage() << std::endl;
 #endif
 #ifdef __linux__
@@ -202,7 +202,7 @@ int DoListCommand(const std::string& path)
             if (subStatResult) {
                 std::string type = subStatResult->IsDirectory() ? "Directory" : "File";
 
-#ifdef WIN32
+#ifdef _WIN32
                 if (subStatResult->IsReparsePoint()) {
                     if (subStatResult->SymbolicLinkTargetPathW()) {
                         type = "Symbolic";
@@ -217,7 +217,7 @@ int DoListCommand(const std::string& path)
 #endif
                 std::cout
                     << "UniqueID: " << subStatResult->UniqueID() << "\t"
-#ifdef WIN32
+#ifdef _WIN32
                     << "Attribute: " << subStatResult->Attribute() << "\t"
 #endif
                     << "Type: " << type << "\t"
@@ -289,7 +289,7 @@ int DoCopySparseCommand(const std::string& srcPath, const std::string& dstPath)
     return 0;
 }
 
-#ifdef WIN32
+#ifdef _WIN32
 int DoGetSecurityDescriptorWCommand(const std::wstring& wPath)
 {
     DWORD retCode = 0;

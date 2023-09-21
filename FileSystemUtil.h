@@ -8,7 +8,7 @@
 #include <vector>
 #include <cstdint>
 
-#ifdef WIN32
+#ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
 #define UNICODE /* foring using WCHAR on windows */
 /**
@@ -28,7 +28,7 @@
 
 using SparseRangeResult = std::optional<std::vector<std::pair<uint64_t, uint64_t>>>;
 
-#ifdef WIN32
+#ifdef _WIN32
 inline uint64_t CombineDWORD(DWORD low, DWORD high) {
     return (uint64_t)low + ((uint64_t)MAXDWORD + 1) * high;
 }
@@ -54,10 +54,10 @@ inline uint64_t ConvertWin32Time(DWORD low, DWORD high)
 */
 namespace FileSystemUtil {
 
-#ifdef WIN32
+#ifdef _WIN32
 /* 
  * transform between UTF-8 and UTF-16
- * any method using win32 API passing WCHAR
+ * any method using _WIN32 API passing WCHAR
  */
 std::wstring Utf8ToUtf16(const std::string& str);
 std::string Utf16ToUtf8(const std::wstring& wstr);
@@ -74,7 +74,7 @@ public:
     StatResult(const std::string& path, const struct stat& statbuff);
 #endif
 
-#ifdef WIN32
+#ifdef _WIN32
     StatResult(const std::wstring& wPath, const BY_HANDLE_FILE_INFORMATION& handleFileInformation);
 #endif
     /**
@@ -98,12 +98,12 @@ public:
 
     uint64_t Size() const; /* size in bytes */
     uint64_t DeviceID() const; /* id of the disk containning the file */
-    uint64_t LinksCount() const; /* no of hard links to the file, on WIN32 always set to 1 on non - NTFS fs */
+    uint64_t LinksCount() const; /* no of hard links to the file, on _WIN32 always set to 1 on non - NTFS fs */
 
     bool IsDirectory() const;
     std::string CanonicalPath() const;
 
-#ifdef WIN32
+#ifdef _WIN32
     /* based on dwFileAttributes field */
     bool IsArchive() const;
     bool IsCompressed() const;
@@ -151,21 +151,21 @@ private:
     struct stat m_stat {};
     std::string m_path; /* raw input path */
 #endif
-#ifdef WIN32
+#ifdef _WIN32
     BY_HANDLE_FILE_INFORMATION m_handleFileInformation{};
     std::wstring m_wPath; /* raw input path */
 #endif
 };
 
 std::optional<StatResult> Stat(const std::string& path);
-#ifdef WIN32
+#ifdef _WIN32
 std::optional<StatResult> StatW(const std::wstring& wPath);
 #endif
 
 class OpenDirEntry
 {
 public:
-#ifdef WIN32
+#ifdef _WIN32
     OpenDirEntry(
         const std::string&          dirPath,
         const WIN32_FIND_DATAW&     findFileData,
@@ -202,7 +202,7 @@ public:
 #endif
 
     bool IsDirectory() const;
-#ifdef WIN32
+#ifdef _WIN32
     std::wstring NameW() const;
     std::wstring FullPathW() const;
 #endif
@@ -217,7 +217,7 @@ public:
     ~OpenDirEntry();
 
 private:
-#ifdef WIN32
+#ifdef _WIN32
     std::wstring m_dirPath;
     HANDLE m_fileHandle = nullptr;
     WIN32_FIND_DATAW m_findFileData;
@@ -238,7 +238,7 @@ bool CopySparseFile(
     const std::string& srcPath,
     const std::string& dstPath,
     const std::vector<std::pair<uint64_t, uint64_t>>& ranges);
-#ifdef WIN32
+#ifdef _WIN32
 SparseRangeResult QuerySparseWin32AllocateRangesW(const std::wstring& wPath);
 bool CopySparseFileWin32W(
     const std::wstring& wSrcPath,
@@ -253,8 +253,8 @@ bool CopySparseFilePosix(
     const std::vector<std::pair<uint64_t, uint64_t>>& ranges);
 #endif
 
-#ifdef WIN32
-/* Win32 Volumes related API */
+#ifdef _WIN32
+/* _WIN32 Volumes related API */
 std::vector<std::wstring> GetWin32DriverListW();
 std::vector<std::string> GetWin32DriverList();
 
@@ -275,7 +275,7 @@ std::optional<std::vector<Win32VolumesDetail>> GetWin32VolumeList();
 
 bool EnablePrivilegeW(const wchar_t* wPrivilegeName);
 
-/* Win32 Security Descriptor related API */
+/* _WIN32 Security Descriptor related API */
 std::optional<std::wstring> GetSecurityDescriptorW(const std::wstring& wPath, DWORD& errCode);
 std::optional<std::string> GetSecurityDescriptor(const std::string& path, DWORD& errCode);
 bool SetSecurityDescriptorW(const std::wstring& wPath, const std::wstring& wSddlStr, DWORD& errCode);

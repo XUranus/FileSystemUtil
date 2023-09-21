@@ -1,7 +1,7 @@
 ﻿#include "FileSystemUtil.h"
 #include <cstdint>
 
-#ifdef WIN32
+#ifdef _WIN32
 #ifndef _SILENCE_CXX17_CODECVT_HEADER_DEPRECATION_WARNING
 #define _SILENCE_CXX17_CODECVT_HEADER_DEPRECATION_WARNING
 #endif
@@ -25,7 +25,7 @@
 using namespace std;
 
 namespace {
-#ifdef WIN32
+#ifdef _WIN32
 constexpr auto WIN32_UID = 0;
 constexpr auto WIN32_GID = 0;
 constexpr auto VOLUME_BUFFER_MAX_LEN = MAX_PATH;
@@ -37,7 +37,7 @@ const std::wstring WPATH_PREFIX = LR"(\\?\)";
 #endif
 }
 
-#ifdef WIN32
+#ifdef _WIN32
 /*
  * These structure is used for Interal Windows API. 
  * There's no associated import library to define them, so developers must define them maunally
@@ -74,7 +74,7 @@ typedef struct _REPARSE_DATA_BUFFER {
 /* Implement Section Begin */
 namespace FileSystemUtil {
 
-#ifdef WIN32
+#ifdef _WIN32
 std::wstring Utf8ToUtf16(const std::string& str)
 {
     using ConvertTypeX = std::codecvt_utf8_utf16<wchar_t>;
@@ -145,7 +145,7 @@ StatResult::StatResult(const std::string& path, const struct stat& statbuff)
 }
 #endif
 
-#ifdef WIN32
+#ifdef _WIN32
 StatResult::StatResult(const std::wstring& wPath, const BY_HANDLE_FILE_INFORMATION& handleFileInformation)
     : m_wPath(wPath)
 {
@@ -159,7 +159,7 @@ uint64_t StatResult::UserID() const
 #ifdef __linux__
     return static_cast<uint64_t>(m_stat.st_gid);
 #endif
-#ifdef WIN32
+#ifdef _WIN32
     return WIN32_UID;
 #endif
 }
@@ -169,7 +169,7 @@ uint64_t StatResult::GroupID() const
 #ifdef __linux__
     return static_cast<uint64_t>(m_stat.st_uid);
 #endif
-#ifdef WIN32
+#ifdef _WIN32
     return WIN32_GID;
 #endif
 }
@@ -179,7 +179,7 @@ uint64_t StatResult::AccessTime() const
 #ifdef __linux__
     return static_cast<uint64_t>(m_stat.st_atime);
 #endif
-#ifdef WIN32
+#ifdef _WIN32
     return ConvertWin32Time(m_handleFileInformation.ftLastAccessTime.dwLowDateTime,
         m_handleFileInformation.ftLastAccessTime.dwHighDateTime);
 #endif
@@ -190,7 +190,7 @@ uint64_t StatResult::CreationTime() const
 #ifdef __linux__
     return static_cast<uint64_t>(m_stat.st_ctime);
 #endif
-#ifdef WIN32
+#ifdef _WIN32
     return ConvertWin32Time(m_handleFileInformation.ftCreationTime.dwLowDateTime,
         m_handleFileInformation.ftCreationTime.dwHighDateTime);
 #endif
@@ -201,7 +201,7 @@ uint64_t StatResult::ModifyTime() const
 #ifdef __linux__
     return static_cast<uint64_t>(m_stat.st_mtime);
 #endif
-#ifdef WIN32
+#ifdef _WIN32
     return ConvertWin32Time(m_handleFileInformation.ftLastWriteTime.dwLowDateTime,
         m_handleFileInformation.ftLastWriteTime.dwHighDateTime);
 #endif
@@ -212,7 +212,7 @@ uint64_t StatResult::UniqueID() const
 #ifdef __linux__
     return static_cast<uint64_t>(m_stat.st_ino);
 #endif
-#ifdef WIN32
+#ifdef _WIN32
     return CombineDWORD(m_handleFileInformation.nFileIndexLow,
         m_handleFileInformation.nFileIndexHigh);
 #endif
@@ -223,7 +223,7 @@ uint64_t StatResult::Size() const
 #ifdef __linux__
     return static_cast<uint64_t>(m_stat.st_size);
 #endif
-#ifdef WIN32
+#ifdef _WIN32
     return CombineDWORD(m_handleFileInformation.nFileSizeLow,
         m_handleFileInformation.nFileSizeHigh);
 #endif
@@ -234,7 +234,7 @@ uint64_t StatResult::DeviceID() const
 #ifdef __linux__
     return static_cast<uint64_t>(m_stat.st_rdev);
 #endif
-#ifdef WIN32
+#ifdef _WIN32
     return static_cast<uint64_t>(m_handleFileInformation.dwVolumeSerialNumber);
 #endif
 }
@@ -244,14 +244,14 @@ uint64_t StatResult::LinksCount() const
 #ifdef __linux__
     return static_cast<uint64_t>(m_stat.st_nlink);
 #endif
-#ifdef WIN32
+#ifdef _WIN32
     return static_cast<uint64_t>(m_handleFileInformation.nNumberOfLinks);
 #endif
 }
 
 bool StatResult::IsDirectory() const
 {
-#ifdef WIN32
+#ifdef _WIN32
     return (m_handleFileInformation.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
 #endif
 #ifdef __linux__
@@ -261,7 +261,7 @@ bool StatResult::IsDirectory() const
 
 std::string StatResult::CanonicalPath() const
 {
-#ifdef WIN32
+#ifdef _WIN32
     return Utf16ToUtf8(CanonicalPathW());
 #endif
 #ifdef __linux__
@@ -275,7 +275,7 @@ std::string StatResult::CanonicalPath() const
 #endif
 }
 
-#ifdef WIN32
+#ifdef _WIN32
 bool StatResult::IsArchive() const { return (m_handleFileInformation.dwFileAttributes & FILE_ATTRIBUTE_ARCHIVE) != 0; }
 bool StatResult::IsCompressed() const { return (m_handleFileInformation.dwFileAttributes & FILE_ATTRIBUTE_COMPRESSED) != 0; }
 bool StatResult::IsEncrypted() const { return (m_handleFileInformation.dwFileAttributes & FILE_ATTRIBUTE_ENCRYPTED) != 0; }
@@ -466,7 +466,7 @@ std::optional<std::wstring> StatResult::SymbolicLinkTargetPathW() const
     return std::make_optional<std::wstring>(wPrintName);
 }
 
-// https://learn.microsoft.com/en-us/windows/win32/fileio/reparse-point-tags
+// https://learn.microsoft.com/en-us/windows/_WIN32/fileio/reparse-point-tags
 bool StatResult::HasReparseSymbolicLinkTag() const { return ReparseTag() == IO_REPARSE_TAG_SYMLINK; }
 bool StatResult::HasReparseMountPointTag() const { return ReparseTag() == IO_REPARSE_TAG_MOUNT_POINT; }
 bool StatResult::HasReparseNfsTag() const { return ReparseTag() == IO_REPARSE_TAG_NFS; }
@@ -561,12 +561,12 @@ std::optional<StatResult> Stat(const std::string& path)
     }
     return std::make_optional<StatResult>(path, statbuff);
 #endif
-#ifdef WIN32
+#ifdef _WIN32
     return StatW(Utf8ToUtf16(path));
 #endif
 }
 
-#ifdef WIN32
+#ifdef _WIN32
 std::optional<StatResult> StatW(const std::wstring& wPath)
 {
     std::wstring unicodePath = ConvertWin32UnicodePath(wPath);
@@ -591,7 +591,7 @@ std::optional<StatResult> StatW(const std::wstring& wPath)
 }
 #endif
 
-#ifdef WIN32
+#ifdef _WIN32
 OpenDirEntry::OpenDirEntry(
     const std::string&      dirPath,
     const WIN32_FIND_DATAW& findFileData,
@@ -652,7 +652,7 @@ uint64_t OpenDirEntry::INode() const { return static_cast<uint64_t>(m_dirent->d_
 
 bool OpenDirEntry::IsDirectory() const
 {
-#ifdef WIN32
+#ifdef _WIN32
     return (m_findFileData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
 #endif
 #ifdef __linux__
@@ -662,7 +662,7 @@ bool OpenDirEntry::IsDirectory() const
 
 std::string OpenDirEntry::Name() const
 {
-#ifdef WIN32
+#ifdef _WIN32
     return Utf16ToUtf8(std::wstring(m_findFileData.cFileName));
 #endif
 #ifdef __linux__
@@ -681,13 +681,13 @@ std::string OpenDirEntry::FullPath() const
         return m_dirPath + separator + Name();
     }
 #endif
-#ifdef WIN32
+#ifdef _WIN32
     std::wstring wfullpath = FullPathW();
     return Utf16ToUtf8(wfullpath);
 #endif
 }
 
-#ifdef WIN32
+#ifdef _WIN32
 
 std::wstring OpenDirEntry::NameW() const
 {
@@ -711,7 +711,7 @@ std::wstring OpenDirEntry::FullPathW() const
 
 bool OpenDirEntry::Next()
 {
-#ifdef WIN32
+#ifdef _WIN32
     if (m_fileHandle == nullptr || m_fileHandle == INVALID_HANDLE_VALUE) {
         return false;
     }
@@ -735,7 +735,7 @@ bool OpenDirEntry::Next()
 
 void OpenDirEntry::Close()
 {
-#ifdef WIN32
+#ifdef _WIN32
     if (m_fileHandle != nullptr && m_fileHandle != INVALID_HANDLE_VALUE) {
         ::FindClose(m_fileHandle);
         m_fileHandle = nullptr;
@@ -752,7 +752,7 @@ void OpenDirEntry::Close()
 
 std::optional<OpenDirEntry> OpenDir(const std::string& path)
 {
-#ifdef WIN32
+#ifdef _WIN32
     std::wstring wpathPattern = ConvertWin32UnicodePath(Utf8ToUtf16(path));
     if (!wpathPattern.empty() && wpathPattern.back() != L'\\') {
         wpathPattern.push_back(L'\\');
@@ -790,7 +790,7 @@ SparseRangeResult QuerySparseAllocateRanges(const std::string& path)
     if (!statResult || statResult->IsDirectory()) {
         return std::nullopt;
     }
-#ifdef WIN32
+#ifdef _WIN32
     if (!statResult->IsSparseFile()) {
         return std::nullopt;
     }
@@ -810,7 +810,7 @@ bool CopySparseFile(const std::string& srcPath, const std::string& dstPath,
     if (!srcResult || dstResult || srcResult->IsDirectory()) {
         return false;
     }
-#ifdef WIN32
+#ifdef _WIN32
     if (!srcResult->IsSparseFile()) {
         return false;
     }
@@ -821,7 +821,7 @@ bool CopySparseFile(const std::string& srcPath, const std::string& dstPath,
 #endif
 }
 
-#ifdef WIN32
+#ifdef _WIN32
 /*
  * Invoke Stat() and check if it's sparse file
  * Represent the range using [<offset, length>] in bytes
@@ -1068,8 +1068,8 @@ bool CopySparseFilePosix(const std::string& srcPath, const std::string& dstPath,
 }
 #endif
 
-#ifdef WIN32
-/* Win32 Volumes related API */
+#ifdef _WIN32
+/* _WIN32 Volumes related API */
 std::vector<std::wstring> GetWin32DriverListW()
 {
     std::vector<std::wstring> wdrivers;
@@ -1140,7 +1140,7 @@ std::optional<std::string> Win32VolumesDetail::GetVolumeDeviceName()
 
 std::optional<std::vector<std::wstring>> Win32VolumesDetail::GetVolumePathListW()
 {
-    /* https://learn.microsoft.com/en-us/windows/win32/fileio/displaying-volume-paths */
+    /* https://learn.microsoft.com/en-us/windows/_WIN32/fileio/displaying-volume-paths */
     if (m_wVolumeName.size() < 4 ||
         m_wVolumeName[0] != L'\\' ||
         m_wVolumeName[1] != L'\\' ||
@@ -1281,16 +1281,16 @@ std::optional<std::vector<Win32VolumesDetail>> GetWin32VolumeList()
     return res;
 }
 
-/* Win32 Security Descriptor related API */
+/* _WIN32 Security Descriptor related API */
 
 /**
-* https://learn.microsoft.com/en-us/windows/win32/api/aclapi/nf-aclapi-getnamedsecurityinfoa?redirectedfrom=MSDN
+* https://learn.microsoft.com/en-us/windows/_WIN32/api/aclapi/nf-aclapi-getnamedsecurityinfoa?redirectedfrom=MSDN
 * https://learn.microsoft.com/en-us/previous-versions/windows/hardware/device-stage/drivers/ff556610(v=vs.85)
-* https://learn.microsoft.com/en-us/windows/win32/secauthz/security-information
-* https://learn.microsoft.com/en-us/windows/win32/api/accctrl/ne-accctrl-se_object_type
-* https://learn.microsoft.com/en-us/windows/win32/api/aclapi/nf-aclapi-getnamedsecurityinfoa
+* https://learn.microsoft.com/en-us/windows/_WIN32/secauthz/security-information
+* https://learn.microsoft.com/en-us/windows/_WIN32/api/accctrl/ne-accctrl-se_object_type
+* https://learn.microsoft.com/en-us/windows/_WIN32/api/aclapi/nf-aclapi-getnamedsecurityinfoa
 * https://blog.csdn.net/eggfly178/article/details/41773601
-* https://learn.microsoft.com/en-us/windows/win32/secauthz/security-descriptor-string-format
+* https://learn.microsoft.com/en-us/windows/_WIN32/secauthz/security-descriptor-string-format
 */
 std::optional<std::wstring> GetSecurityDescriptorW(const std::wstring& wPath, DWORD& errCode)
 {
@@ -1583,7 +1583,7 @@ bool Exists(const std::string& path)
 
 bool Mkdir(const std::string& path)
 {
-#ifdef WIN32
+#ifdef _WIN32
     std::wstring wPathUnicode = ConvertWin32UnicodePath(Utf8ToUtf16(path));
     return CreateDirectoryW(wPathUnicode.c_str(), nullptr);
 #endif
@@ -1607,7 +1607,7 @@ bool MkdirRecursive(const std::string& path)
 std::string ParentDirectoryPath(const std::string& path)
 {
     const std::string currendDirPath = ".";
-#ifdef WIN32
+#ifdef _WIN32
     std::string win32Path = path;
     std::replace(win32Path.begin(), win32Path.end(), '/', '\\');
     if (!win32Path.empty() && win32Path.back() != '\\') {
