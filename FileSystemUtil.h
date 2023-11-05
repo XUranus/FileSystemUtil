@@ -9,8 +9,14 @@
 #include <cstdint>
 
 #ifdef _WIN32
+
+#ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
+#endif
+
+#ifndef UNICODE
 #define UNICODE /* foring using WCHAR on windows */
+#endif
 /**
  * #define KEEP_WIN32_NATIVE_TIMESTAMP_VALUE
  * uncomment this macro if you need to get native windows microsecond timestamp
